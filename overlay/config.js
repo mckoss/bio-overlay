@@ -145,7 +145,10 @@
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      setStatus(`Saved to ${data.path}. Restart bio-overlay to apply.`, "ok");
+      const msg = data.applied
+        ? "Saved and applied — no restart needed."
+        : `Saved to ${data.path}.`;
+      setStatus(msg, "ok");
     } catch (err) {
       setStatus("Save failed: " + err.message, "err");
     }

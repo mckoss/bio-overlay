@@ -155,6 +155,29 @@ class TelemetryHub:
             ),
         )
 
+    async def reconcile_participants(self, participants) -> None:
+        """Add/update/remove/reorder participant states to match a new config.
+
+        Existing participants keep their session history; renames just update the
+        label. Used to apply config edits live without a restart. `participants`
+        is a list of objects with ``id``, ``display_name``, ``device_id``.
+        """
+        ordered: dict[str, ParticipantState] = {}
+        for p in participants:
+            state = self._participants.get(p.id)
+            if state is None:
+                state = ParticipantState(
+                    participant_id=p.id,
+                    display_name=p.display_name,
+                    device_id=p.device_id,
+                )
+            else:
+                state.display_name = p.display_name
+                state.device_id = p.device_id
+            ordered[p.id] = state
+        self._participants = ordered
+        await self._broadcast()
+
     def set_recorder(self, recorder: Recorder | None) -> None:
         """Register a sink called for each valid reading (e.g. a history file)."""
         self._recorder = recorder
@@ -224,7 +247,11 @@ class TelemetryHub:
         rr_intervals_ms: list[float] | None = None,
         sensor_contact: bool | None = None,
     ) -> None:
-        state = self._participants[participant_id]
+        # A reading may arrive for a participant just removed by a live config
+        # change; ignore it rather than crash.
+        state = self._participants.get(participant_id)
+        if state is None:
+            return
         now = _now()
         state.bpm = bpm
         state.rr_intervals_ms = rr_intervals_ms or []
@@ -244,7 +271,9 @@ class TelemetryHub:
         await self._broadcast()
 
     async def set_connected(self, participant_id: str, connected: bool) -> None:
-        state = self._participants[participant_id]
+        state = self._participants.get(participant_id)
+        if state is None:
+            return
         state.connected = connected
         if not connected:
             state.stale = True

@@ -92,8 +92,22 @@ async def _serve_with_source(
         hub.set_recorder(writer.record)
         logging.info("recording history to %s/YYYY-MM-DD.json", history_dir)
 
+    source = source_factory(config, hub) if source_factory else None
+
+    async def apply_config(new_config: AppConfig) -> None:
+        """Apply saved config edits live: reconcile the hub and the source."""
+        await hub.reconcile_participants(new_config.participants)
+        if source is not None and hasattr(source, "apply"):
+            await source.apply(new_config.participants)
+        logging.info("applied config change (%d participants)", len(new_config.participants))
+
     runner = await run_server(
-        hub, config.host, config.port, config=config, config_path=config_path
+        hub,
+        config.host,
+        config.port,
+        config=config,
+        config_path=config_path,
+        apply_config=apply_config,
     )
 
     if open_browser:
@@ -103,8 +117,6 @@ async def _serve_with_source(
             logging.info("opened setup page in browser: %s", url)
         except Exception as exc:  # noqa: BLE001 - never fail startup over this
             logging.debug("could not open browser: %s", exc)
-
-    source = source_factory(config, hub) if source_factory else None
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()

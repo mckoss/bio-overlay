@@ -10,6 +10,7 @@ stale/disconnected overlay states.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import math
 
 from .config import ParticipantConfig
@@ -89,25 +90,58 @@ class SimulatedStrap:
 
 
 class Simulator:
-    """Drives a SimulatedStrap per participant."""
+    """Drives a SimulatedStrap per participant, with live apply.
+
+    Mirrors :class:`~bio_overlay.ble_collector.BleCollector` so config edits can
+    be tested (add/remove/rename participants) without hardware.
+    """
 
     def __init__(self, participants: list[ParticipantConfig], hub: TelemetryHub) -> None:
-        self._straps = [
-            SimulatedStrap(
-                p,
-                hub,
-                phase=i * math.pi,  # offset participants so they don't move in lockstep
-                # Only the second participant simulates dropouts, to show both states.
-                dropout_every=25 if i == 1 else None,
-                # Distinct breathing rates so the two cards differ.
-                breaths_per_min=14.0 if i == 0 else 11.0,
-            )
-            for i, p in enumerate(participants)
-        ]
+        self._hub = hub
+        self._params = list(participants)
+        self._straps: dict[str, SimulatedStrap] = {}
+        self._tasks: dict[str, asyncio.Task] = {}
+        self._stop = asyncio.Event()
+
+    def _start(self, index: int, p: ParticipantConfig) -> None:
+        strap = SimulatedStrap(
+            p,
+            self._hub,
+            phase=index * math.pi,  # offset so participants don't move in lockstep
+            # Only the second participant simulates dropouts, to show both states.
+            dropout_every=25 if index == 1 else None,
+            # Distinct breathing rates so the two cards differ.
+            breaths_per_min=14.0 if index % 2 == 0 else 11.0,
+        )
+        self._straps[p.id] = strap
+        self._tasks[p.id] = asyncio.create_task(strap.run())
+
+    async def _stop_one(self, pid: str) -> None:
+        strap = self._straps.pop(pid, None)
+        task = self._tasks.pop(pid, None)
+        if strap is not None:
+            strap.stop()
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     async def run(self) -> None:
-        await asyncio.gather(*(s.run() for s in self._straps))
+        for i, p in enumerate(self._params):
+            self._start(i, p)
+        await self._stop.wait()
+        for pid in list(self._straps):
+            await self._stop_one(pid)
+
+    async def apply(self, participants: list[ParticipantConfig]) -> None:
+        new_ids = [p.id for p in participants]
+        for pid in list(self._straps):
+            if pid not in new_ids:
+                await self._stop_one(pid)
+        for i, p in enumerate(participants):
+            if p.id not in self._straps:
+                self._start(i, p)
+        self._params = list(participants)
 
     def stop(self) -> None:
-        for s in self._straps:
-            s.stop()
+        self._stop.set()

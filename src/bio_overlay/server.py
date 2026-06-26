@@ -122,7 +122,16 @@ async def _put_config(request: web.Request) -> web.Response:
     config.save(path)
     request.app["config"] = config
     logger.info("saved config to %s (%d participant(s))", path, len(config.participants))
-    return web.json_response({"ok": True, "path": str(path)})
+
+    applied = False
+    apply_config = request.app.get("apply_config")
+    if apply_config is not None:
+        try:
+            await apply_config(config)
+            applied = True
+        except Exception as exc:  # noqa: BLE001 - report but don't fail the save
+            logger.warning("config saved but live-apply failed: %s", exc)
+    return web.json_response({"ok": True, "path": str(path), "applied": applied})
 
 
 async def _scan(request: web.Request) -> web.Response:
@@ -153,11 +162,13 @@ def build_app(
     hub: TelemetryHub,
     config: AppConfig | None = None,
     config_path: str | None = None,
+    apply_config=None,
 ) -> web.Application:
     app = web.Application()
     app["hub"] = hub
     app["config"] = config
     app["config_path"] = config_path
+    app["apply_config"] = apply_config
     app["websockets"] = set()
     app.on_shutdown.append(_on_shutdown)
     app.add_routes(
@@ -182,9 +193,10 @@ async def run_server(
     port: int,
     config: AppConfig | None = None,
     config_path: str | None = None,
+    apply_config=None,
 ) -> web.AppRunner:
     """Start the server and return the runner (caller is responsible for cleanup)."""
-    app = build_app(hub, config=config, config_path=config_path)
+    app = build_app(hub, config=config, config_path=config_path, apply_config=apply_config)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host, port)

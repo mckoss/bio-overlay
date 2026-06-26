@@ -12,6 +12,7 @@ server, simulator) can be used and tested on machines without it installed.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 
 from .config import ParticipantConfig
@@ -199,15 +200,63 @@ class StrapConnection:
         self._stop.set()
 
 
+def _binding_changed(a: ParticipantConfig, b: ParticipantConfig) -> bool:
+    """True if a participant's strap binding changed (needs a reconnect)."""
+    return (a.device_id, a.address, a.name_prefix) != (b.device_id, b.address, b.name_prefix)
+
+
 class BleCollector:
-    """Runs one :class:`StrapConnection` per configured participant."""
+    """Supervises one :class:`StrapConnection` per participant, with live apply.
+
+    Connections can be added, removed, or rebound at runtime via :meth:`apply`
+    so config edits take effect without restarting the process.
+    """
 
     def __init__(self, participants: list[ParticipantConfig], hub: TelemetryHub) -> None:
-        self._connections = [StrapConnection(p, hub) for p in participants]
+        self._hub = hub
+        self._params: dict[str, ParticipantConfig] = {p.id: p for p in participants}
+        self._conns: dict[str, StrapConnection] = {}
+        self._tasks: dict[str, asyncio.Task] = {}
+        self._stop = asyncio.Event()
+
+    def _start(self, p: ParticipantConfig) -> None:
+        conn = StrapConnection(p, self._hub)
+        self._conns[p.id] = conn
+        self._tasks[p.id] = asyncio.create_task(conn.run())
+
+    async def _stop_one(self, pid: str) -> None:
+        conn = self._conns.pop(pid, None)
+        task = self._tasks.pop(pid, None)
+        if conn is not None:
+            conn.stop()
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     async def run(self) -> None:
-        await asyncio.gather(*(c.run() for c in self._connections))
+        for p in self._params.values():
+            self._start(p)
+        await self._stop.wait()
+        for pid in list(self._conns):
+            await self._stop_one(pid)
+
+    async def apply(self, participants: list[ParticipantConfig]) -> None:
+        """Reconcile running connections to a new participant list."""
+        new = {p.id: p for p in participants}
+        # Stop connections that were removed or whose strap binding changed.
+        for pid in list(self._conns):
+            old = self._params.get(pid)
+            cur = new.get(pid)
+            if cur is None or (old is not None and _binding_changed(old, cur)):
+                await self._stop_one(pid)
+                logger.info("[%s] connection stopped (config change)", pid)
+        # Start connections that are new or were just rebound.
+        for pid, p in new.items():
+            if pid not in self._conns:
+                self._start(p)
+                logger.info("[%s] connection started (config change)", pid)
+        self._params = new
 
     def stop(self) -> None:
-        for c in self._connections:
-            c.stop()
+        self._stop.set()
