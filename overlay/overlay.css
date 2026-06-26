@@ -32,12 +32,20 @@ body {
   text-shadow: 0 0.1rem 0.4rem rgba(0, 0, 0, 0.9);
 }
 
+/*
+ * Cards pin to the top corners: with one participant the single card sits at the
+ * upper-left; with two, they split to the upper-left and upper-right corners
+ * (space-between places a lone item at the start, two items at the ends).
+ */
 .panels {
   position: absolute;
   top: 2.5vh;
   left: 2.5vw;
+  right: 2.5vw;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
   gap: 1rem;
 }
 
