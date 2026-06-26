@@ -30,12 +30,20 @@ class SimulatedStrap:
         *,
         phase: float = 0.0,
         dropout_every: int | None = None,
+        breaths_per_min: float = 14.0,
+        rsa_amp_ms: float = 35.0,
     ) -> None:
         self.participant = participant
         self.hub = hub
         self._phase = phase
         self._dropout_every = dropout_every
+        self._f_resp = breaths_per_min / 60.0
+        self._rsa_amp_ms = rsa_amp_ms
         self._tick = 0
+        # Beat-time clock (seconds) advanced by each RR interval, so the RR
+        # series carries a self-consistent respiratory modulation the estimator
+        # can recover — useful for demoing respiration without hardware.
+        self._beat_time_s = 0.0
         self._stop = asyncio.Event()
 
     async def run(self) -> None:
@@ -54,15 +62,18 @@ class SimulatedStrap:
             bpm = int(
                 _BASE_BPM + _AMPLITUDE * math.sin(2 * math.pi * t / _PERIOD_S + self._phase)
             )
-            rr_ms = 60000.0 / bpm
-            # Add a touch of beat-to-beat variation around the mean RR.
-            jitter = 12.0 * math.sin(t * 1.7 + self._phase)
-            rr_intervals = [round(rr_ms + jitter, 1), round(rr_ms - jitter, 1)]
+            mean_rr = 60000.0 / bpm
+            # Respiratory sinus arrhythmia: modulate RR at the breathing rate.
+            rsa = self._rsa_amp_ms * math.sin(
+                2 * math.pi * self._f_resp * self._beat_time_s + self._phase
+            )
+            rr = round(mean_rr + rsa, 1)
+            self._beat_time_s += rr / 1000.0
 
             await self.hub.update_measurement(
                 self.participant.id,
                 bpm=bpm,
-                rr_intervals_ms=rr_intervals,
+                rr_intervals_ms=[rr],
                 sensor_contact=True,
             )
             await self._sleep(_UPDATE_INTERVAL_S)
@@ -88,6 +99,8 @@ class Simulator:
                 phase=i * math.pi,  # offset participants so they don't move in lockstep
                 # Only the second participant simulates dropouts, to show both states.
                 dropout_every=25 if i == 1 else None,
+                # Distinct breathing rates so the two cards differ.
+                breaths_per_min=14.0 if i == 0 else 11.0,
             )
             for i, p in enumerate(participants)
         ]

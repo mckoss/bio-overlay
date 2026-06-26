@@ -69,12 +69,13 @@
     metrics.append(live, spark);
 
     const sessionEl = el("div", "session");
+    const respEl = el("div", "resp");
     const badgeEl = el("div", "badge");
 
-    root.append(nameEl, metrics, sessionEl, badgeEl);
+    root.append(nameEl, metrics, sessionEl, respEl, badgeEl);
     panelsEl.appendChild(root);
 
-    panel = { root, nameEl, bpmEl, sparkEl, maxEl, minEl, sessionEl, badgeEl };
+    panel = { root, nameEl, bpmEl, sparkEl, maxEl, minEl, sessionEl, respEl, badgeEl };
     panels.set(participantId, panel);
     return panel;
   }
@@ -105,7 +106,23 @@
     // History comes from the server, so a reload restores it immediately.
     renderSparkline(panel, p.samples || []);
     renderSession(panel, p.session);
+    renderRespiration(panel, p.respiration);
     panel.badgeEl.textContent = "";
+  }
+
+  // Experimental respiration is hidden below this confidence to avoid showing
+  // misleading numbers when the RSA signal is weak (e.g. during hard effort).
+  const RESP_MIN_CONFIDENCE = 0.2;
+
+  function renderRespiration(panel, resp) {
+    if (!resp || resp.breathsPerMin == null || resp.confidence < RESP_MIN_CONFIDENCE) {
+      panel.respEl.innerHTML = "";
+      return;
+    }
+    panel.respEl.innerHTML =
+      `<span>resp</span>` +
+      `<span><b>${resp.breathsPerMin.toFixed(0)}</b> br/min</span>` +
+      `<span class="est">est</span>`;
   }
 
   function renderSparkline(panel, samples) {

@@ -13,6 +13,7 @@ authors = [{ name = "Mike Koss", email = "mckoss@gmail.com" }]
 dependencies = [
     "bleak>=0.22",
     "aiohttp>=3.9",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]

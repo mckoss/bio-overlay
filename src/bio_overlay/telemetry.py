@@ -21,12 +21,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
+from .respiration import estimate_respiration
+
 # If no fresh measurement arrives within this many seconds, the participant is
 # marked stale even if the BLE link still claims to be connected.
 DEFAULT_STALE_AFTER_S = 5.0
 
 # How much recent BPM history to retain for the sparkline window.
 DEFAULT_HISTORY_WINDOW_S = 5 * 60
+
+# How much recent RR history to retain for the (experimental) respiration estimate.
+DEFAULT_RESP_WINDOW_S = 60
 
 
 def _now() -> datetime:
@@ -54,6 +59,10 @@ class ParticipantState:
     session_max: int | None = None
     session_sum: int = 0
     session_count: int = 0
+    # Rolling RR window for the experimental respiration estimate: (epoch_ms, rr_ms).
+    rr_window: deque = field(default_factory=deque)
+    respiration_brpm: float | None = None
+    respiration_confidence: float | None = None
 
     def record(self, bpm: int, at_ms: int, window_ms: int) -> None:
         """Append a valid reading and update the rolling window + session stats."""
@@ -65,6 +74,18 @@ class ParticipantState:
         self.session_max = bpm if self.session_max is None else max(self.session_max, bpm)
         self.session_sum += bpm
         self.session_count += 1
+
+    def record_rr(self, rr_ms: list[float], at_ms: int, window_ms: int) -> None:
+        """Append RR intervals to the rolling window and refresh the respiration estimate."""
+        for rr in rr_ms:
+            self.rr_window.append((at_ms, rr))
+        cutoff = at_ms - window_ms
+        while self.rr_window and self.rr_window[0][0] < cutoff:
+            self.rr_window.popleft()
+        est = estimate_respiration([rr for _, rr in self.rr_window])
+        if est is not None:
+            self.respiration_brpm = est.breaths_per_min
+            self.respiration_confidence = est.confidence
 
     def to_message(self) -> dict:
         """Serialize to the camelCase shape consumed by the overlay client."""
@@ -86,6 +107,15 @@ class ParticipantState:
                 "avg": avg,
                 "count": self.session_count,
             },
+            # Experimental: estimated breaths/min with a 0..1 confidence, or null.
+            "respiration": (
+                {
+                    "breathsPerMin": self.respiration_brpm,
+                    "confidence": self.respiration_confidence,
+                }
+                if self.respiration_brpm is not None
+                else None
+            ),
         }
 
 
@@ -101,11 +131,13 @@ class TelemetryHub:
         self,
         stale_after_s: float = DEFAULT_STALE_AFTER_S,
         history_window_s: float = DEFAULT_HISTORY_WINDOW_S,
+        resp_window_s: float = DEFAULT_RESP_WINDOW_S,
     ) -> None:
         self._participants: dict[str, ParticipantState] = {}
         self._subscribers: set[Subscriber] = set()
         self._stale_after_s = stale_after_s
         self._history_window_ms = int(history_window_s * 1000)
+        self._resp_window_ms = int(resp_window_s * 1000)
         self._watchdog_task: asyncio.Task | None = None
         self._recorder: Recorder | None = None
 
@@ -163,7 +195,10 @@ class TelemetryHub:
         # bpm == 0 is the H10 reporting "no heartbeat detected" (loose contact),
         # not a real reading — keep it out of the sparkline and session stats.
         if bpm > 0:
-            state.record(bpm, int(now.timestamp() * 1000), self._history_window_ms)
+            now_ms = int(now.timestamp() * 1000)
+            state.record(bpm, now_ms, self._history_window_ms)
+            if state.rr_intervals_ms:
+                state.record_rr(state.rr_intervals_ms, now_ms, self._resp_window_ms)
             if self._recorder is not None:
                 self._recorder(state, bpm, state.rr_intervals_ms, now)
         await self._broadcast()
