@@ -94,6 +94,28 @@ async def _config_page(request: web.Request) -> web.FileResponse:
     return web.FileResponse(OVERLAY_DIR / "config.html")
 
 
+async def _history_page(request: web.Request) -> web.FileResponse:
+    return web.FileResponse(OVERLAY_DIR / "history.html")
+
+
+async def _api_history(request: web.Request) -> web.Response:
+    from .history import list_sessions
+
+    directory = request.app["history_dir"]
+    sessions = list_sessions(directory) if directory else []
+    return web.json_response({"sessions": sessions})
+
+
+async def _api_session(request: web.Request) -> web.Response:
+    from .history import load_session
+
+    directory = request.app["history_dir"]
+    session = load_session(directory, request.match_info["id"]) if directory else None
+    if session is None:
+        raise web.HTTPNotFound(reason="session not found")
+    return web.json_response(session)
+
+
 async def _healthz(_request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
@@ -176,23 +198,28 @@ def build_app(
     config: AppConfig | None = None,
     config_path: str | None = None,
     apply_config=None,
+    history_dir: str | None = None,
 ) -> web.Application:
     app = web.Application()
     app["hub"] = hub
     app["config"] = config
     app["config_path"] = config_path
     app["apply_config"] = apply_config
+    app["history_dir"] = history_dir
     app["websockets"] = set()
     app.on_shutdown.append(_on_shutdown)
     app.add_routes(
         [
             web.get("/", _index),
             web.get("/config", _config_page),
+            web.get("/history", _history_page),
             web.get("/ws", _ws_handler),
             web.get("/healthz", _healthz),
             web.get("/api/config", _get_config),
             web.put("/api/config", _put_config),
             web.get("/api/scan", _scan),
+            web.get("/api/history", _api_history),
+            web.get("/api/history/{id}", _api_session),
         ]
     )
     # Serve remaining overlay assets (css/js) as static files.
@@ -229,9 +256,16 @@ async def run_server(
     config_path: str | None = None,
     apply_config=None,
     port_scan: bool = False,
+    history_dir: str | None = None,
 ) -> tuple[web.AppRunner, int]:
     """Start the server; return (runner, actual_port). Caller cleans up the runner."""
-    app = build_app(hub, config=config, config_path=config_path, apply_config=apply_config)
+    app = build_app(
+        hub,
+        config=config,
+        config_path=config_path,
+        apply_config=apply_config,
+        history_dir=history_dir,
+    )
     runner = web.AppRunner(app)
     await runner.setup()
     try:

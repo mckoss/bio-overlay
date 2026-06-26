@@ -113,6 +113,10 @@ async def _serve_with_source(
             writer.start_session(new_config.participants)
         logging.info("applied config change (%d participants)", len(new_config.participants))
 
+    # The history page reads past sessions even when not writing (simulate /
+    # --no-history), so resolve a directory to read from regardless.
+    history_read_dir = history_dir or str(default_history_dir())
+
     runner, port = await run_server(
         hub,
         config.host,
@@ -121,6 +125,7 @@ async def _serve_with_source(
         config_path=config_path,
         apply_config=apply_config,
         port_scan=port_scan,
+        history_dir=history_read_dir,
     )
 
     if open_browser:

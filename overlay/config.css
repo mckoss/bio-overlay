@@ -48,6 +48,15 @@ code {
   font-size: 0.9em;
 }
 
+a {
+  color: var(--accent-2);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
 section {
   background: var(--panel);
   border-radius: var(--radius);

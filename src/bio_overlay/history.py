@@ -84,6 +84,120 @@ def read_records(directory: str | Path, date_str: str) -> list[dict]:
     return out
 
 
+def _parse_sessions(path: Path) -> list[dict]:
+    """Split one day's file into sessions: each header line starts a new one."""
+    sessions: list[dict] = []
+    cur: dict | None = None
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if "session" in rec:
+                cur = {
+                    "start": rec.get("session"),
+                    "participants": rec.get("participants", []),
+                    "data": [],
+                }
+                sessions.append(cur)
+            elif cur is not None and "s" in rec and "p" in rec:
+                cur["data"].append(rec)
+    except OSError as exc:
+        logger.warning("could not read %s: %s", path, exc)
+    return sessions
+
+
+def list_sessions(directory: str | Path) -> list[dict]:
+    """Summaries of all recorded sessions, newest first."""
+    out: list[dict] = []
+    for path in sorted(Path(directory).glob("*.jsonl")):
+        date = path.stem
+        for i, sess in enumerate(_parse_sessions(path)):
+            data = sess["data"]
+            offs = [d["s"] for d in data if isinstance(d.get("s"), (int, float))]
+            if not offs:
+                continue  # skip empty sessions (header but no readings)
+            parts = sess["participants"]
+            present = sorted({d["p"] for d in data if isinstance(d.get("p"), int)})
+            names = [
+                (parts[p].get("name") or parts[p].get("id"))
+                for p in present
+                if 0 <= p < len(parts)
+            ]
+            out.append(
+                {
+                    "id": f"{date}__{i}",
+                    "date": date,
+                    "startedAt": sess["start"],
+                    "durationS": max(offs) - min(offs),
+                    "participants": names,
+                    "samples": len(data),
+                }
+            )
+    out.sort(key=lambda s: s.get("startedAt") or "", reverse=True)
+    return out
+
+
+def load_session(directory: str | Path, session_id: str) -> dict | None:
+    """Full detail for one session: per-participant bpm series and stats."""
+    date, sep, idx_s = session_id.partition("__")
+    if not sep:
+        return None
+    try:
+        idx = int(idx_s)
+    except ValueError:
+        return None
+    path = Path(directory) / f"{date}.jsonl"
+    if not path.exists():
+        return None
+    sessions = _parse_sessions(path)
+    if idx < 0 or idx >= len(sessions):
+        return None
+
+    sess = sessions[idx]
+    parts = sess["participants"]
+    per: dict[int, dict] = {}
+    for d in sess["data"]:
+        p, s, bpm = d.get("p"), d.get("s"), d.get("bpm")
+        if not isinstance(p, int) or not isinstance(s, (int, float)) or bpm is None:
+            continue
+        entry = per.setdefault(p, {"points": [], "bpms": []})
+        entry["points"].append([s, bpm])
+        entry["bpms"].append(bpm)
+
+    participants = []
+    for p in sorted(per):
+        meta = parts[p] if 0 <= p < len(parts) else {}
+        bpms = per[p]["bpms"]
+        participants.append(
+            {
+                "id": meta.get("id"),
+                "name": meta.get("name") or meta.get("id") or f"#{p}",
+                "deviceId": meta.get("deviceId"),
+                "points": per[p]["points"],
+                "stats": {
+                    "min": min(bpms),
+                    "max": max(bpms),
+                    "avg": round(sum(bpms) / len(bpms)),
+                    "count": len(bpms),
+                },
+            }
+        )
+
+    offs = [d["s"] for d in sess["data"] if isinstance(d.get("s"), (int, float))]
+    return {
+        "id": session_id,
+        "date": date,
+        "startedAt": sess["start"],
+        "durationS": (max(offs) - min(offs)) if offs else 0,
+        "participants": participants,
+    }
+
+
 @dataclass
 class _Pending:
     last_ms: int | None = None
