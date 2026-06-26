@@ -219,10 +219,9 @@ real-hardware findings.
 
 ## Documents
 
-- [Design](docs/design.md)
+- [Design notes](docs/design.md)
 - [Development & handoff notes](docs/development.md)
 - [Source summary](docs/source-summary.md)
-- [Mac setup notes](docs/mac-setup.md)
 
 ## Non-Goals
 
