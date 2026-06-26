@@ -31,6 +31,18 @@ _SUBSCRIBE_RETRIES = 6
 _SUBSCRIBE_RETRY_DELAY_S = 0.5
 
 
+def device_id_from_name(name: str) -> str | None:
+    """Extract the trailing Polar device ID from an advertised name.
+
+    "Polar H10 16CD9E3C" -> "16CD9E3C". Returns None if there's no trailing
+    token that looks like an ID.
+    """
+    parts = name.split()
+    if len(parts) >= 2 and parts[-1] not in {"H10", "?"}:
+        return parts[-1]
+    return None
+
+
 async def scan(timeout: float = _SCAN_TIMEOUT_S, name_prefix: str | None = None):
     """Return discovered BLE devices, optionally filtered by name prefix.
 

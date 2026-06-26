@@ -38,10 +38,15 @@ def _build_hub(config: AppConfig) -> TelemetryHub:
 
 
 async def _serve_with_source(
-    config: AppConfig, source_factory, *, history_dir: str | None = None
+    config: AppConfig,
+    source_factory,
+    *,
+    history_dir: str | None = None,
+    config_path: str | None = None,
 ) -> None:
     """Run the server alongside a telemetry source (collector or simulator).
 
+    If source_factory is None, only the server runs (e.g. the `config` setup UI).
     If history_dir is given, real readings are persisted to a daily JSON file.
     """
     hub = _build_hub(config)
@@ -66,8 +71,10 @@ async def _serve_with_source(
         hub.set_recorder(writer.record)
         logging.info("recording history to %s/YYYY-MM-DD.json", history_dir)
 
-    runner = await run_server(hub, config.host, config.port)
-    source = source_factory(config, hub)
+    runner = await run_server(
+        hub, config.host, config.port, config=config, config_path=config_path
+    )
+    source = source_factory(config, hub) if source_factory else None
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -77,13 +84,15 @@ async def _serve_with_source(
         except NotImplementedError:  # pragma: no cover - non-unix
             pass
 
-    source_task = asyncio.create_task(source.run())
+    source_task = asyncio.create_task(source.run()) if source else None
     try:
         await stop.wait()
     finally:
         logging.info("shutting down...")
-        source.stop()
-        source_task.cancel()
+        if source is not None:
+            source.stop()
+        if source_task is not None:
+            source_task.cancel()
         await hub.stop_watchdog()
         if writer is not None:
             await writer.close()
@@ -91,7 +100,7 @@ async def _serve_with_source(
 
 
 async def _cmd_scan(args: argparse.Namespace) -> None:
-    from .ble_collector import scan
+    from .ble_collector import device_id_from_name, scan
 
     prefix = None if args.all else args.name_prefix
     print(f"Scanning for {args.timeout:.0f}s"
@@ -102,7 +111,7 @@ async def _cmd_scan(args: argparse.Namespace) -> None:
         return
     print(f"\nFound {len(devices)} device(s):\n")
     for address, name, services in devices:
-        device_id = _device_id_from_name(name)
+        device_id = device_id_from_name(name)
         print(f"  {name}")
         if device_id:
             print(f"    deviceId: {device_id}   <- printed on the strap; use this")
@@ -112,18 +121,7 @@ async def _cmd_scan(args: argparse.Namespace) -> None:
         print()
     print("Put the deviceId into config.json under the matching participant, e.g.:")
     print('    { "id": "participant-1", "displayName": "Alice", "deviceId": "16CD9E3C" }')
-
-
-def _device_id_from_name(name: str) -> str | None:
-    """Extract the trailing Polar device ID from an advertised name.
-
-    "Polar H10 16CD9E3C" -> "16CD9E3C". Returns None if there's no trailing
-    token that looks like an ID.
-    """
-    parts = name.split()
-    if len(parts) >= 2 and parts[-1] not in {"H10", "?"}:
-        return parts[-1]
-    return None
+    print("Or use the setup page: run `bio-overlay config` and open /config in a browser.")
 
 
 async def _cmd_run(args: argparse.Namespace) -> None:
@@ -135,6 +133,7 @@ async def _cmd_run(args: argparse.Namespace) -> None:
         config,
         lambda cfg, hub: BleCollector(cfg.participants, hub),
         history_dir=history_dir,
+        config_path=args.config or "config.json",
     )
 
 
@@ -145,6 +144,18 @@ async def _cmd_simulate(args: argparse.Namespace) -> None:
     await _serve_with_source(
         config,
         lambda cfg, hub: Simulator(cfg.participants, hub),
+        config_path=args.config or "config.json",
+    )
+
+
+async def _cmd_config(args: argparse.Namespace) -> None:
+    """Serve just the setup/config page (no collector) for pairing straps."""
+    config = _load_config(args)
+    print(f"Setup page: http://{config.host}:{config.port}/config")
+    await _serve_with_source(
+        config,
+        None,  # no telemetry source — leaves BLE free for scanning
+        config_path=args.config or "config.json",
     )
 
 
@@ -164,6 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, func, help_text in (
         ("run", _cmd_run, "collect from real straps and serve the overlay"),
         ("simulate", _cmd_simulate, "serve the overlay with simulated data"),
+        ("config", _cmd_config, "serve the setup page to edit config and pair straps"),
     ):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("-c", "--config", help="path to config.json")

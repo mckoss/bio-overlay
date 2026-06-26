@@ -51,6 +51,17 @@ class ParticipantConfig:
     address: str | None = None
     name_prefix: str = DEFAULT_NAME_PREFIX
 
+    def to_dict(self) -> dict:
+        out = {
+            "id": self.id,
+            "displayName": self.display_name,
+            "deviceId": self.device_id,
+            "namePrefix": self.name_prefix,
+        }
+        if self.address:
+            out["address"] = self.address
+        return out
+
 
 @dataclass
 class AppConfig:
@@ -78,10 +89,27 @@ class AppConfig:
             port=int(data.get("port", 8080)),
         )
 
+    def to_dict(self) -> dict:
+        return {
+            "host": self.host,
+            "port": self.port,
+            "staleAfterSeconds": self.stale_after_seconds,
+            "participants": [p.to_dict() for p in self.participants],
+        }
+
     @classmethod
     def load(cls, path: str | Path) -> "AppConfig":
         with open(path, "r", encoding="utf-8") as fh:
             return cls.from_dict(json.load(fh))
+
+    def save(self, path: str | Path) -> None:
+        """Write the config to disk as pretty JSON (atomic replace)."""
+        import os
+
+        path = Path(path)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.to_dict(), indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp, path)
 
     @classmethod
     def default(cls) -> "AppConfig":

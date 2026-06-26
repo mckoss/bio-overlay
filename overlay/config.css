@@ -1,0 +1,223 @@
+/* Setup/config page — a normal (opaque) admin UI, unlike the transparent overlay. */
+
+:root {
+  --bg: #14161c;
+  --panel: #1e2230;
+  --panel-2: #262b3b;
+  --text: #f2f4f8;
+  --muted: #98a0b3;
+  --accent: #ff4d4f;
+  --accent-2: #2ea3ff;
+  --ok: #2ecc71;
+  --radius: 0.5rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.45;
+}
+
+.wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+header h1 {
+  margin: 0 0 0.2rem;
+  font-size: 1.6rem;
+}
+
+.path {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+code {
+  background: var(--panel-2);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  font-size: 0.9em;
+}
+
+section {
+  background: var(--panel);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1.25rem;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.8rem;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.hint {
+  margin: 0 0 0.9rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* Participant rows */
+.participant {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 0.6rem;
+  align-items: end;
+  padding: 0.7rem;
+  background: var(--panel-2);
+  border-radius: var(--radius);
+  margin-bottom: 0.6rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.field label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+input,
+select {
+  background: var(--bg);
+  border: 1px solid #333a4d;
+  color: var(--text);
+  border-radius: 0.35rem;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent-2);
+}
+
+.btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid #3a4257;
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--accent-2);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn-remove {
+  background: transparent;
+  border: 1px solid #3a4257;
+  color: var(--muted);
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+}
+
+.btn-remove:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Scan results */
+.scan-results:empty::after {
+  content: "No scan yet.";
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.device {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--panel-2);
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+}
+
+.device .id {
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+}
+
+.device .name {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.device .spacer {
+  flex: 1;
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.status {
+  font-size: 0.9rem;
+}
+
+.status.ok {
+  color: var(--ok);
+}
+
+.status.err {
+  color: var(--accent);
+}
+
+.note {
+  margin-top: 0.8rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.spin {
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
