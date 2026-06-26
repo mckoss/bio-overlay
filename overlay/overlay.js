@@ -14,6 +14,16 @@
   const panelsEl = document.getElementById("panels");
   const statusEl = document.getElementById("status");
 
+  // Debug/keying aid: `?bg=green` (or any CSS color) paints the otherwise
+  // transparent background so you can see exactly which area is overlay vs
+  // see-through. Leave it off for OBS — Browser Sources composite real alpha.
+  applyDebugBackground();
+
+  function applyDebugBackground() {
+    const bg = new URLSearchParams(location.search).get("bg");
+    if (bg) document.body.style.background = bg;
+  }
+
   // participantId -> { root, nameEl, bpmEl, badgeEl }
   const panels = new Map();
   let reconnectDelay = RECONNECT_MIN_MS;

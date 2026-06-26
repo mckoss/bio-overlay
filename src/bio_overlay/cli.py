@@ -75,12 +75,28 @@ async def _cmd_scan(args: argparse.Namespace) -> None:
         return
     print(f"\nFound {len(devices)} device(s):\n")
     for address, name, services in devices:
+        device_id = _device_id_from_name(name)
         print(f"  {name}")
-        print(f"    address: {address}")
+        if device_id:
+            print(f"    deviceId: {device_id}   <- printed on the strap; use this")
+        print(f"    address:  {address}   (macOS UUID, this Mac only)")
         if services:
             print(f"    services: {', '.join(services)}")
         print()
-    print("Copy the address into config.json under the matching participant.")
+    print("Put the deviceId into config.json under the matching participant, e.g.:")
+    print('    { "id": "participant-1", "displayName": "Alice", "deviceId": "16CD9E3C" }')
+
+
+def _device_id_from_name(name: str) -> str | None:
+    """Extract the trailing Polar device ID from an advertised name.
+
+    "Polar H10 16CD9E3C" -> "16CD9E3C". Returns None if there's no trailing
+    token that looks like an ID.
+    """
+    parts = name.split()
+    if len(parts) >= 2 and parts[-1] not in {"H10", "?"}:
+        return parts[-1]
+    return None
 
 
 async def _cmd_run(args: argparse.Namespace) -> None:

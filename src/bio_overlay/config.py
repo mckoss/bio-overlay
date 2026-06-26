@@ -1,8 +1,12 @@
 """Configuration loading for bio-overlay.
 
-A config file binds participant identities to BLE devices. On macOS, BLE devices
-are addressed by an opaque CoreBluetooth UUID (not a hardware MAC), so the
-`address` field is expected to be that UUID once discovered via `scan`.
+A config file binds participant identities to physical BLE straps. The preferred
+binding is `deviceId` — the Polar ID printed on the strap (e.g. "16CD9E3C"),
+which also appears in the advertised name "Polar H10 16CD9E3C". It identifies
+the physical sensor and is portable across machines.
+
+`address` (the macOS CoreBluetooth UUID) is a Mac-specific fallback; it is not
+printed on the strap and can differ on another computer.
 
 Example config.json:
 
@@ -12,18 +16,18 @@ Example config.json:
         {
           "id": "participant-1",
           "displayName": "Alice",
-          "address": "0000XXXX-0000-0000-0000-000000000000"
+          "deviceId": "16CD9E3C"
         },
         {
           "id": "participant-2",
           "displayName": "Bob",
-          "address": null
+          "deviceId": null
         }
       ]
     }
 
-An `address` of null means "not yet bound"; the collector will fall back to
-matching by advertised device name prefix (see `name_prefix`).
+If neither `deviceId` nor `address` is set, the collector falls back to matching
+the first strap whose advertised name starts with `namePrefix`.
 """
 
 from __future__ import annotations
@@ -39,6 +43,11 @@ DEFAULT_NAME_PREFIX = "Polar H10"
 class ParticipantConfig:
     id: str
     display_name: str
+    # Preferred binding: the Polar device ID printed on the strap (e.g.
+    # "16CD9E3C"), matched against the advertised name. Portable across Macs.
+    device_id: str | None = None
+    # Fallback binding: the macOS CoreBluetooth UUID (Mac-specific, not on the
+    # strap). Only used when device_id is unset.
     address: str | None = None
     name_prefix: str = DEFAULT_NAME_PREFIX
 
@@ -56,6 +65,7 @@ class AppConfig:
             ParticipantConfig(
                 id=p["id"],
                 display_name=p.get("displayName", p["id"]),
+                device_id=p.get("deviceId"),
                 address=p.get("address"),
                 name_prefix=p.get("namePrefix", DEFAULT_NAME_PREFIX),
             )

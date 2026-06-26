@@ -42,13 +42,31 @@ goes to a "no signal" stale state to demonstrate the disconnected UI.
 
 ```bash
 cp config.example.json config.json   # config.json is git-ignored
-bio-overlay scan                     # discover straps -> copy each macOS UUID into config.json
+bio-overlay scan                     # prints each strap's deviceId (printed on the strap)
 bio-overlay run -c config.json       # collect from real straps + serve overlay
 ```
 
-`scan` matches by name prefix `Polar` by default; once you copy each strap's
-`address` (a CoreBluetooth UUID on macOS) into `config.json`, `run` binds each
-participant to a specific strap.
+Bind each participant by `deviceId` — the Polar ID printed on the physical strap
+(e.g. `16CD9E3C`), which `scan` reports and which appears in the advertised name
+`Polar H10 16CD9E3C`. This is portable across Macs. The macOS CoreBluetooth
+`address` is a Mac-specific fallback only (not printed on the strap), used when
+no `deviceId` is set.
+
+Resolution order in the collector: `deviceId` > `address` > first strap matching
+`namePrefix`.
+
+### Notes from real-hardware testing (H10 `16CD9E3C`)
+
+- RR intervals are present in **every** notification (good for the respiration
+  research path).
+- The H10 does **not** set the sensor-contact-supported flag, so we can't use it
+  to detect "strap off" — rely on disconnect/staleness instead.
+- A **`bpm=0`** reading means the strap is on but not detecting a heartbeat
+  (loose/dry electrodes). Tighten/wet the strap. (Possible later UX: render
+  `bpm=0` as "no contact" rather than a literal 0.)
+- `start_notify` right after connect can intermittently raise "Service Discovery
+  has not been performed yet" on CoreBluetooth; the collector now retries the
+  subscribe a few times to absorb this.
 
 ### ⚠️ macOS Bluetooth permission
 

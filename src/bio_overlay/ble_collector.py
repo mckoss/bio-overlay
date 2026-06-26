@@ -26,6 +26,9 @@ HR_MEASUREMENT_CHAR_UUID = "00002a37-0000-1000-8000-00805f9b34fb"
 
 _RECONNECT_DELAY_S = 3.0
 _SCAN_TIMEOUT_S = 10.0
+# start_notify can race CoreBluetooth service discovery right after connect.
+_SUBSCRIBE_RETRIES = 6
+_SUBSCRIBE_RETRY_DELAY_S = 0.5
 
 
 async def scan(timeout: float = _SCAN_TIMEOUT_S, name_prefix: str | None = None):
@@ -54,27 +57,52 @@ class StrapConnection:
         self.hub = hub
         self._stop = asyncio.Event()
 
+    def _name_matches(self, device, adv) -> bool:
+        """True if an advertised device matches this participant's binding.
+
+        Always requires the name prefix; if a device_id is configured, the
+        advertised name must also contain it (case-insensitive).
+        """
+        name = device.name or adv.local_name or ""
+        p = self.participant
+        if not name.startswith(p.name_prefix):
+            return False
+        if p.device_id and p.device_id.upper() not in name.upper():
+            return False
+        return True
+
     async def _resolve_device(self):
-        """Find the BLE device for this participant, by address or name prefix."""
+        """Find the BLE device for this participant.
+
+        Preference order: device_id (printed on the strap, portable) > address
+        (Mac-specific CoreBluetooth UUID) > first strap matching name_prefix.
+        """
         from bleak import BleakScanner  # lazy import
 
-        if self.participant.address:
+        p = self.participant
+
+        # Preferred: match the physical strap by its Polar device ID.
+        if p.device_id:
+            return await BleakScanner.find_device_by_filter(
+                self._name_matches, timeout=_SCAN_TIMEOUT_S
+            )
+
+        # Fallback: the Mac-specific CoreBluetooth UUID.
+        if p.address:
             device = await BleakScanner.find_device_by_address(
-                self.participant.address, timeout=_SCAN_TIMEOUT_S
+                p.address, timeout=_SCAN_TIMEOUT_S
             )
             if device:
                 return device
             logger.warning(
                 "[%s] address %s not found; falling back to name scan",
-                self.participant.id,
-                self.participant.address,
+                p.id,
+                p.address,
             )
 
+        # Last resort: first strap whose name starts with the prefix.
         return await BleakScanner.find_device_by_filter(
-            lambda d, adv: bool(
-                (d.name or adv.local_name or "").startswith(self.participant.name_prefix)
-            ),
-            timeout=_SCAN_TIMEOUT_S,
+            self._name_matches, timeout=_SCAN_TIMEOUT_S
         )
 
     def _on_notify(self, _sender, data: bytearray) -> None:
@@ -108,7 +136,7 @@ class StrapConnection:
 
                 logger.info("[%s] connecting to %s", self.participant.id, device)
                 async with BleakClient(device) as client:
-                    await client.start_notify(HR_MEASUREMENT_CHAR_UUID, self._on_notify)
+                    await self._subscribe(client)
                     await self.hub.set_connected(self.participant.id, True)
                     logger.info("[%s] connected", self.participant.id)
 
@@ -124,6 +152,30 @@ class StrapConnection:
 
             if not self._stop.is_set():
                 await self._wait_or_stop(_RECONNECT_DELAY_S)
+
+    async def _subscribe(self, client) -> None:
+        """Start HR notifications, tolerating the CoreBluetooth discovery race.
+
+        On macOS, ``start_notify`` immediately after connect can raise
+        "Service Discovery has not been performed yet" if the GATT service
+        scan hasn't finished. Retry briefly before giving up to the outer
+        reconnect loop.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(_SUBSCRIBE_RETRIES):
+            try:
+                await client.start_notify(HR_MEASUREMENT_CHAR_UUID, self._on_notify)
+                return
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                logger.debug(
+                    "[%s] start_notify attempt %d failed: %s",
+                    self.participant.id,
+                    attempt + 1,
+                    exc,
+                )
+                await asyncio.sleep(_SUBSCRIBE_RETRY_DELAY_S)
+        raise last_exc  # type: ignore[misc]
 
     async def _wait_or_stop(self, seconds: float) -> None:
         try:

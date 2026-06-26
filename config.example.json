@@ -6,13 +6,13 @@
     {
       "id": "participant-1",
       "displayName": "Participant 1",
-      "address": null,
+      "deviceId": null,
       "namePrefix": "Polar H10"
     },
     {
       "id": "participant-2",
       "displayName": "Participant 2",
-      "address": null,
+      "deviceId": null,
       "namePrefix": "Polar H10"
     }
   ]
