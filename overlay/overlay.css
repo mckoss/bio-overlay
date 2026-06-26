@@ -45,7 +45,7 @@ body {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: stretch; /* both cards share the height of the taller one */
   gap: 1rem;
 }
 
@@ -146,7 +146,9 @@ body {
 /* Whole-session summary. */
 .panel .session {
   display: flex;
+  align-items: center;
   gap: 0.9rem;
+  min-height: 1.15rem; /* reserve the row so the card height stays constant */
   font-size: 0.8rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -162,13 +164,10 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-height: 1.3rem; /* reserve the row so EST appearing/vanishing doesn't resize */
   font-size: 0.8rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-
-.panel .resp:empty {
-  display: none;
 }
 
 .panel .resp b {
