@@ -43,10 +43,26 @@ Working end-to-end and verified against a real Polar H10:
 5. ✅ Simulator for hardware-free development.
 6. ⏳ Two straps at once (single-strap proven; dual-strap reliability still to test).
 
-Respiration-rate display is a later, experimental feature; RR intervals are
-already captured (and present in every H10 notification) but not yet displayed.
+An experimental estimated breathing rate (from RR-interval variation) is also
+shown on each card, labeled EST — see [Respiration](#respiration-experimental).
 
-## Install (macOS)
+## Download
+
+Prebuilt single-file executables for **macOS (Apple Silicon)** and **Windows
+(x64)** are attached to each [GitHub Release](https://github.com/mckoss/bio-overlay/releases).
+Download the one for your OS, then run it from a terminal — e.g. `bio-overlay config`
+to set up, then `bio-overlay run`.
+
+First-run notes:
+- **macOS:** the binary is unsigned, so Gatekeeper may block it — right-click →
+  **Open** the first time (or `xattr -d com.apple.quarantine ./bio-overlay`).
+  Run it from **Terminal** so the Bluetooth permission prompt can be granted.
+- **Windows:** SmartScreen may warn on an unsigned exe — **More info → Run anyway**.
+
+When run as a packaged executable, config and history live in
+`~/Documents/Bio-Overlay/` (see [Where files are stored](#where-files-are-stored)).
+
+## Install from source (macOS)
 
 ```bash
 git clone https://github.com/mckoss/bio-overlay.git
@@ -77,7 +93,23 @@ bio-overlay run -c config.json  # then open http://127.0.0.1:8080/
 > under *System Settings → Privacy & Security → Bluetooth* and re-run. Until
 > this is granted, `scan`/`run` will appear to hang.
 
-## Configuration (`config.json`)
+## Configuration
+
+### Setup page (no JSON editing)
+
+The easiest way to configure participants and pair straps is the built-in setup
+page:
+
+```bash
+bio-overlay config              # then open http://127.0.0.1:8080/config
+```
+
+From there you can add/remove participants, edit each one's name/id/deviceId,
+and **Scan** for nearby straps to assign (pair) them to a participant — then
+**Save**. The `config` command runs without the collector so BLE is free for a
+clean scan. Saved changes take effect the next time you start `bio-overlay run`.
+
+### `config.json` (manual)
 
 Copy `config.example.json` to `config.json` (which is git-ignored, since it can
 contain personal device IDs) and edit it. Without `-c`, sensible defaults are
@@ -124,7 +156,7 @@ name starts with `namePrefix`.
 
 ## Command-line reference
 
-Global: `-v` / `--verbose` enables debug logging.
+Global: `-v` / `--verbose` enables debug logging; `--version` prints the version.
 
 ### `bio-overlay scan`
 Discover nearby BLE straps and print their `deviceId` and macOS address.
@@ -143,12 +175,28 @@ Collect from real straps and serve the overlay.
 | `-c, --config PATH` | built-in defaults | Path to `config.json`. |
 | `--host HOST` | `127.0.0.1` | Override the bind host. |
 | `--port PORT` | `8080` | Override the server port. |
-| `--history-dir DIR` | `history` | Directory for daily history files. |
+| `--history-dir DIR` | data dir `/history` | Directory for daily history files. |
 | `--no-history` | off | Don't write the daily history file. |
 
 ### `bio-overlay simulate`
 Serve the overlay with synthetic data (no hardware, no history file written).
 Accepts `-c/--config`, `--host`, `--port` (same as `run`).
+
+### `bio-overlay config`
+Serve only the setup page (`/config`) — no collector, so BLE is free for
+scanning/pairing. Accepts `-c/--config`, `--host`, `--port`.
+
+## Where files are stored
+
+`config.json` and the `history/` directory live in different places depending on
+how you run bio-overlay:
+
+| How you run it | Default config | Default history |
+| --- | --- | --- |
+| From a source checkout | `./config.json` | `./history/` |
+| From a packaged executable | `~/Documents/Bio-Overlay/config.json` | `~/Documents/Bio-Overlay/history/` |
+
+`-c/--config` and `--history-dir` always override these defaults.
 
 ## The overlay page
 
@@ -229,6 +277,31 @@ during hard exercise, so treat the number as approximate. See
 
 See [docs/development.md](docs/development.md) for deeper handoff notes and
 real-hardware findings.
+
+## Building & releasing
+
+Build a single-file executable locally (output in `dist/`):
+
+```bash
+python -m pip install -e ".[package]"
+pyinstaller packaging/bio-overlay.spec --noconfirm
+./dist/bio-overlay --version
+```
+
+PyInstaller cannot cross-compile, so each OS is built on its own runner. The
+[`Release` workflow](.github/workflows/release.yml) builds **macOS** and
+**Windows** executables and publishes them to a GitHub Release. To cut a
+release, tag a [SemVer](https://semver.org) version and push it:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The tagged builds are attached to the release, and the Releases page is the
+version history. (You can also run the workflow manually via
+*Actions → Release → Run workflow* to get build artifacts without publishing.)
+Keep the tag in sync with the `version` in `pyproject.toml` / `__init__.py`.
 
 ## Documents
 

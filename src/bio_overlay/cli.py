@@ -1,12 +1,13 @@
 """Command-line entry point.
 
 Subcommands:
-    scan       Discover nearby BLE straps and print their macOS UUIDs.
+    scan       Discover nearby BLE straps and print their device IDs.
     run        Start the telemetry server + BLE collector (needs hardware).
     simulate   Start the telemetry server + simulated data (no hardware).
+    config     Serve only the setup page (/config) to edit config and pair straps.
 
-Both `run` and `simulate` serve the overlay at http://<host>:<port>/ for use as
-an OBS Browser Source.
+`run` and `simulate` serve the overlay at http://<host>:<port>/ for use as an
+OBS Browser Source; all three serving commands also expose /config.
 """
 
 from __future__ import annotations
@@ -15,14 +16,22 @@ import argparse
 import asyncio
 import logging
 import signal
+from pathlib import Path
 
+from . import __version__
 from .config import AppConfig
+from .paths import default_config_path, default_history_dir
 from .server import run_server
 from .telemetry import TelemetryHub
 
 
+def _resolve_config_path(args: argparse.Namespace) -> str:
+    return args.config or str(default_config_path())
+
+
 def _load_config(args: argparse.Namespace) -> AppConfig:
-    config = AppConfig.load(args.config) if args.config else AppConfig.default()
+    path = Path(_resolve_config_path(args))
+    config = AppConfig.load(path) if path.exists() else AppConfig.default()
     if getattr(args, "host", None):
         config.host = args.host
     if getattr(args, "port", None):
@@ -128,12 +137,14 @@ async def _cmd_run(args: argparse.Namespace) -> None:
     from .ble_collector import BleCollector
 
     config = _load_config(args)
-    history_dir = None if args.no_history else args.history_dir
+    history_dir = None
+    if not args.no_history:
+        history_dir = args.history_dir or str(default_history_dir())
     await _serve_with_source(
         config,
         lambda cfg, hub: BleCollector(cfg.participants, hub),
         history_dir=history_dir,
-        config_path=args.config or "config.json",
+        config_path=_resolve_config_path(args),
     )
 
 
@@ -144,7 +155,7 @@ async def _cmd_simulate(args: argparse.Namespace) -> None:
     await _serve_with_source(
         config,
         lambda cfg, hub: Simulator(cfg.participants, hub),
-        config_path=args.config or "config.json",
+        config_path=_resolve_config_path(args),
     )
 
 
@@ -155,7 +166,7 @@ async def _cmd_config(args: argparse.Namespace) -> None:
     await _serve_with_source(
         config,
         None,  # no telemetry source — leaves BLE free for scanning
-        config_path=args.config or "config.json",
+        config_path=_resolve_config_path(args),
     )
 
 
@@ -163,6 +174,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="bio-overlay", description=__doc__)
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="enable debug logging"
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"bio-overlay {__version__}"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -186,8 +200,9 @@ def build_parser() -> argparse.ArgumentParser:
             # data is never written there.
             p.add_argument(
                 "--history-dir",
-                default="history",
-                help="directory for daily history files (default ./history)",
+                default=None,
+                help="directory for daily history files "
+                "(default ./history, or ~/Documents/Bio-Overlay/history when packaged)",
             )
             p.add_argument(
                 "--no-history",
