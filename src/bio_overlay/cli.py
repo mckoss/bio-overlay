@@ -45,6 +45,12 @@ def _should_open_browser(args: argparse.Namespace) -> bool:
     return not getattr(args, "no_browser", False)
 
 
+def _should_port_scan(args: argparse.Namespace) -> bool:
+    """Scan for a free port by default; an explicit --port is strict unless
+    --port-scan is also given."""
+    return bool(getattr(args, "port_scan", False)) or getattr(args, "port", None) is None
+
+
 def _browser_host(host: str) -> str:
     # A wildcard bind isn't browsable; point the browser at loopback.
     return "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
@@ -181,7 +187,7 @@ async def _cmd_run(args: argparse.Namespace) -> None:
         history_dir=history_dir,
         config_path=_resolve_config_path(args),
         open_browser=_should_open_browser(args),
-        port_scan=args.port_scan,
+        port_scan=_should_port_scan(args),
     )
 
 
@@ -194,7 +200,7 @@ async def _cmd_simulate(args: argparse.Namespace) -> None:
         lambda cfg, hub: Simulator(cfg.participants, hub),
         config_path=_resolve_config_path(args),
         open_browser=_should_open_browser(args),
-        port_scan=args.port_scan,
+        port_scan=_should_port_scan(args),
     )
 
 
@@ -225,7 +231,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument(
             "--port-scan",
             action="store_true",
-            help="if the port is busy, automatically pick the next free one",
+            help="if the port is busy, pick the next free one "
+            "(default unless --port is given explicitly)",
         )
         if name == "run":
             # Real readings are persisted to history/YYYY-MM-DD.json; simulated
