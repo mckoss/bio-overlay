@@ -16,11 +16,13 @@ import argparse
 import asyncio
 import logging
 import signal
+import sys
+import webbrowser
 from pathlib import Path
 
 from . import __version__
 from .config import AppConfig
-from .paths import default_config_path, default_history_dir
+from .paths import default_config_path, default_history_dir, is_frozen
 from .server import run_server
 from .telemetry import TelemetryHub
 
@@ -39,6 +41,20 @@ def _load_config(args: argparse.Namespace) -> AppConfig:
     return config
 
 
+def _should_open_browser(args: argparse.Namespace) -> bool:
+    """Auto-open the setup page when packaged, unless told not to."""
+    if getattr(args, "open", False):
+        return True
+    if getattr(args, "no_browser", False):
+        return False
+    return is_frozen()
+
+
+def _browser_host(host: str) -> str:
+    # A wildcard bind isn't browsable; point the browser at loopback.
+    return "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+
+
 def _build_hub(config: AppConfig) -> TelemetryHub:
     hub = TelemetryHub(stale_after_s=config.stale_after_seconds)
     for p in config.participants:
@@ -52,6 +68,7 @@ async def _serve_with_source(
     *,
     history_dir: str | None = None,
     config_path: str | None = None,
+    open_browser: bool = False,
 ) -> None:
     """Run the server alongside a telemetry source (collector or simulator).
 
@@ -83,6 +100,15 @@ async def _serve_with_source(
     runner = await run_server(
         hub, config.host, config.port, config=config, config_path=config_path
     )
+
+    if open_browser:
+        url = f"http://{_browser_host(config.host)}:{config.port}/config"
+        try:
+            webbrowser.open(url)
+            logging.info("opened setup page in browser: %s", url)
+        except Exception as exc:  # noqa: BLE001 - never fail startup over this
+            logging.debug("could not open browser: %s", exc)
+
     source = source_factory(config, hub) if source_factory else None
 
     stop = asyncio.Event()
@@ -145,6 +171,7 @@ async def _cmd_run(args: argparse.Namespace) -> None:
         lambda cfg, hub: BleCollector(cfg.participants, hub),
         history_dir=history_dir,
         config_path=_resolve_config_path(args),
+        open_browser=_should_open_browser(args),
     )
 
 
@@ -156,17 +183,19 @@ async def _cmd_simulate(args: argparse.Namespace) -> None:
         config,
         lambda cfg, hub: Simulator(cfg.participants, hub),
         config_path=_resolve_config_path(args),
+        open_browser=_should_open_browser(args),
     )
 
 
 async def _cmd_config(args: argparse.Namespace) -> None:
     """Serve just the setup/config page (no collector) for pairing straps."""
     config = _load_config(args)
-    print(f"Setup page: http://{config.host}:{config.port}/config")
+    print(f"Setup page: http://{_browser_host(config.host)}:{config.port}/config")
     await _serve_with_source(
         config,
         None,  # no telemetry source — leaves BLE free for scanning
         config_path=_resolve_config_path(args),
+        open_browser=_should_open_browser(args),
     )
 
 
@@ -209,12 +238,29 @@ def build_parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="do not write the daily history file",
             )
+        # Auto-open the setup page in the browser (default on for packaged exe).
+        p.add_argument(
+            "--open",
+            action="store_true",
+            help="open the setup page in a browser on start",
+        )
+        p.add_argument(
+            "--no-browser",
+            action="store_true",
+            help="do not auto-open the setup page (default for source runs)",
+        )
         p.set_defaults(func=func)
 
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
+    if argv is None:
+        argv = sys.argv[1:]
+    # Double-clicking the packaged executable passes no arguments; default to
+    # `run` so it starts collecting and opens the setup page.
+    if is_frozen() and not argv:
+        argv = ["run"]
     args = build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

@@ -151,9 +151,27 @@
     }
   }
 
+  function setupOverlayLinks() {
+    const overlayUrl = location.origin + "/";
+    document.getElementById("overlay-url").textContent = overlayUrl;
+    document.getElementById("open-overlay").href = overlayUrl;
+    const copy = document.getElementById("copy-url");
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(overlayUrl);
+        const prev = copy.textContent;
+        copy.textContent = "Copied!";
+        setTimeout(() => (copy.textContent = prev), 1200);
+      } catch {
+        setStatus("Copy failed — select the URL and copy manually.", "err");
+      }
+    });
+  }
+
   document.getElementById("add").addEventListener("click", addParticipant);
   document.getElementById("scan").addEventListener("click", (e) => scan(e.currentTarget));
   document.getElementById("save").addEventListener("click", save);
 
+  setupOverlayLinks();
   load();
 })();

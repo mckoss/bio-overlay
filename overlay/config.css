@@ -186,6 +186,19 @@ select:focus {
   flex: 1;
 }
 
+.obs-url {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.obs-url code {
+  flex: 1;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.95rem;
+  word-break: break-all;
+}
+
 footer {
   display: flex;
   align-items: center;

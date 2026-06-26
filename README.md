@@ -50,8 +50,10 @@ shown on each card, labeled EST — see [Respiration](#respiration-experimental)
 
 Prebuilt single-file executables for **macOS (Apple Silicon)** and **Windows
 (x64)** are attached to each [GitHub Release](https://github.com/mckoss/bio-overlay/releases).
-Download the one for your OS, then run it from a terminal — e.g. `bio-overlay config`
-to set up, then `bio-overlay run`.
+Download the one for your OS and run it. With no arguments the executable starts
+collecting and **automatically opens the setup page** in your browser, where you
+can add participants, pair straps, and copy the URL to paste into OBS (it also
+links straight to the overlay). Pass `--no-browser` to skip the auto-open.
 
 First-run notes:
 - **macOS:** the binary is unsigned, so Gatekeeper may block it — right-click →
@@ -185,6 +187,10 @@ Accepts `-c/--config`, `--host`, `--port` (same as `run`).
 ### `bio-overlay config`
 Serve only the setup page (`/config`) — no collector, so BLE is free for
 scanning/pairing. Accepts `-c/--config`, `--host`, `--port`.
+
+All three serving commands (`run`, `simulate`, `config`) accept `--open` to
+open the setup page in a browser on start and `--no-browser` to suppress it.
+Auto-open defaults **on** for the packaged executable and **off** from source.
 
 ## Where files are stored
 
