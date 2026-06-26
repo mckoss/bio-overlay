@@ -182,10 +182,13 @@
   function render(state) {
     const seen = new Set();
     for (const p of state.participants || []) {
+      // Only show participants a source has activated; an unconfigured (unpaired)
+      // participant is never touched, so it stays hidden.
+      if (!p.active) continue;
       seen.add(p.participantId);
       renderParticipant(p);
     }
-    // Remove panels for participants no longer present.
+    // Remove panels for participants no longer present or no longer active.
     for (const [id, panel] of panels) {
       if (!seen.has(id)) {
         panel.root.remove();

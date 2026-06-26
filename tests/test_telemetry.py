@@ -30,6 +30,20 @@ def test_snapshot_has_both_participants(hub):
     assert snap["participants"][0]["connected"] is False
 
 
+def test_participants_start_inactive(hub):
+    # Unconfigured/untouched participants are inactive so the overlay hides them.
+    for p in hub.snapshot()["participants"]:
+        assert p["active"] is False
+
+
+async def test_set_connected_marks_active(hub):
+    await hub.set_connected("participant-1", False)
+    states = {p["participantId"]: p for p in hub.snapshot()["participants"]}
+    assert states["participant-1"]["active"] is True
+    # The untouched participant stays inactive (hidden).
+    assert states["participant-2"]["active"] is False
+
+
 async def test_update_measurement_broadcasts(hub):
     received = []
 

@@ -200,6 +200,16 @@ class StrapConnection:
         self._stop.set()
 
 
+def _is_configured(p: ParticipantConfig) -> bool:
+    """A participant is connectable only once bound to a specific strap.
+
+    Without a deviceId/address we must NOT fall back to "any matching strap" —
+    otherwise multiple unconfigured participants all grab the same strap and show
+    duplicate readings.
+    """
+    return bool(p.device_id or p.address)
+
+
 def _binding_changed(a: ParticipantConfig, b: ParticipantConfig) -> bool:
     """True if a participant's strap binding changed (needs a reconnect)."""
     return (a.device_id, a.address, a.name_prefix) != (b.device_id, b.address, b.name_prefix)
@@ -236,23 +246,30 @@ class BleCollector:
 
     async def run(self) -> None:
         for p in self._params.values():
-            self._start(p)
+            if _is_configured(p):
+                self._start(p)
+            else:
+                logger.info("[%s] no strap bound; not connecting", p.id)
         await self._stop.wait()
         for pid in list(self._conns):
             await self._stop_one(pid)
 
     async def apply(self, participants: list[ParticipantConfig]) -> None:
-        """Reconcile running connections to a new participant list."""
+        """Reconcile running connections to a new participant list.
+
+        Only configured (strap-bound) participants get a connection.
+        """
         new = {p.id: p for p in participants}
-        # Stop connections that were removed or whose strap binding changed.
+        wanted = {pid: p for pid, p in new.items() if _is_configured(p)}
+        # Stop connections that were removed, unbound, or whose strap changed.
         for pid in list(self._conns):
             old = self._params.get(pid)
-            cur = new.get(pid)
+            cur = wanted.get(pid)
             if cur is None or (old is not None and _binding_changed(old, cur)):
                 await self._stop_one(pid)
                 logger.info("[%s] connection stopped (config change)", pid)
-        # Start connections that are new or were just rebound.
-        for pid, p in new.items():
+        # Start connections that are newly bound.
+        for pid, p in wanted.items():
             if pid not in self._conns:
                 self._start(p)
                 logger.info("[%s] connection started (config change)", pid)

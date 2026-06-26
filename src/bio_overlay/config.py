@@ -114,10 +114,9 @@ class AppConfig:
 
     @classmethod
     def default(cls) -> "AppConfig":
-        """A sane two-participant default usable without a config file."""
+        """A single unconfigured participant; pair a strap via the setup page."""
         return cls(
             participants=[
                 ParticipantConfig(id="participant-1", display_name="Participant 1"),
-                ParticipantConfig(id="participant-2", display_name="Participant 2"),
             ]
         )

@@ -51,6 +51,9 @@ class ParticipantState:
     stale: bool = False
     sensor_contact: bool | None = None
     updated_at: str | None = None
+    # True once a source (collector/simulator) has handled this participant.
+    # Unconfigured participants are never touched, so the overlay hides them.
+    active: bool = False
 
     # Rolling sparkline window: (epoch_ms, bpm) pairs, oldest first.
     samples: deque = field(default_factory=deque)
@@ -97,6 +100,7 @@ class ParticipantState:
             "rrIntervalsMs": self.rr_intervals_ms,
             "connected": self.connected,
             "stale": self.stale,
+            "active": self.active,
             "sensorContact": self.sensor_contact,
             "updatedAt": self.updated_at,
             # Full session history so the overlay is a stateless renderer.
@@ -203,6 +207,8 @@ class TelemetryHub:
                 at_ms = int(datetime.fromisoformat(ts).timestamp() * 1000)
             except ValueError:
                 continue
+            # Today had data for this participant, so show it on restart.
+            state.active = True
             # Whole-session aggregates use every reading from the file.
             state.session_min = bpm if state.session_min is None else min(state.session_min, bpm)
             state.session_max = bpm if state.session_max is None else max(state.session_max, bpm)
@@ -252,6 +258,7 @@ class TelemetryHub:
         state = self._participants.get(participant_id)
         if state is None:
             return
+        state.active = True
         now = _now()
         state.bpm = bpm
         state.rr_intervals_ms = rr_intervals_ms or []
@@ -274,6 +281,7 @@ class TelemetryHub:
         state = self._participants.get(participant_id)
         if state is None:
             return
+        state.active = True
         state.connected = connected
         if not connected:
             state.stale = True
