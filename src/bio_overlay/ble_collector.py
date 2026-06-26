@@ -138,6 +138,11 @@ class StrapConnection:
         """Connect-and-subscribe retry loop until :meth:`stop` is called."""
         from bleak import BleakClient  # lazy import
 
+        # Mark the participant active+disconnected up front so its card shows
+        # "no signal" immediately (and stays) while we try to connect — handy
+        # for spotting a strap that never connects.
+        await self.hub.set_connected(self.participant.id, False)
+
         while not self._stop.is_set():
             device = None
             try:

@@ -198,7 +198,9 @@ class TelemetryHub:
         spark_cutoff = now_ms - self._history_window_ms
         rr_cutoff = now_ms - self._resp_window_ms
         for rec in records:
-            state = self._participants.get(rec.get("participantId"))
+            # Compact JSONL keys ("p"/"rr"); tolerate the older verbose keys too.
+            pid = rec.get("p") or rec.get("participantId")
+            state = self._participants.get(pid)
             bpm = rec.get("bpm")
             ts = rec.get("t")
             if state is None or not bpm or bpm <= 0 or not ts:
@@ -218,7 +220,7 @@ class TelemetryHub:
             if at_ms >= spark_cutoff:
                 state.samples.append((at_ms, bpm))
             if at_ms >= rr_cutoff:
-                for rr in rec.get("rrIntervalsMs") or []:
+                for rr in rec.get("rr") or rec.get("rrIntervalsMs") or []:
                     state.rr_window.append((at_ms, rr))
         # Restore the respiration estimate from the rebuilt RR window.
         for state in self._participants.values():

@@ -13,7 +13,7 @@ through Zoom (or any app that can select a camera).
 Polar H10 #1 -- BLE --+
                       |
                       v
-                Local collector  ──>  history/YYYY-MM-DD.json (optional)
+                Local collector  ──>  history/YYYY-MM-DD.jsonl (optional)
                       |
 Polar H10 #2 -- BLE --+-- WebSocket --> Overlay webpage --> OBS Browser Source
                                                             |
@@ -260,12 +260,13 @@ etc.) works the same way.
   them on every update. A page reload, OBS scene reload, or reconnect restores
   the sparkline and stats immediately. History also accrues while no overlay is
   connected.
-- **On disk (daily file):** `run` appends every real reading to
-  `history/YYYY-MM-DD.json` (git-ignored) — a JSON array of
-  `{t, participantId, deviceId, bpm, rrIntervalsMs}`. It flushes atomically on a
-  timer and on shutdown, appends to an existing same-day file, and rolls over at
-  midnight. Disable with `--no-history` or relocate with `--history-dir`.
-  `simulate` never writes history.
+- **On disk (daily file):** `run` appends real readings to
+  `history/YYYY-MM-DD.jsonl` (git-ignored), an append-only [JSON Lines](https://jsonlines.org)
+  file. A `session` header line lists the participants once; each data line is
+  compact — `{"s": <seconds since the header>, "p": <participant index>, "bpm": N, "rr": [...]}`.
+  At most one line per participant every 5s (12/min), with RR intervals batched
+  so none are lost. Rolls over at midnight. Disable with `--no-history` or
+  relocate with `--history-dir`. `simulate` never writes history.
 - **Survives server restarts:** on startup `run` reloads today's history file
   and rebuilds the session stats, sparkline window, and respiration estimate, so
   restarting the server mid-session keeps the displayed history (note: all of a

@@ -92,12 +92,13 @@ async def _serve_with_source(
         seeded = read_records(history_dir, today)
         if seeded:
             hub.seed_history(seeded)
-            logging.info("restored %d readings from %s/%s.json", len(seeded), history_dir, today)
+            logging.info("restored %d readings from %s/%s.jsonl", len(seeded), history_dir, today)
 
         writer = DailyHistoryWriter(history_dir)
         writer.start()
+        writer.start_session(config.participants)
         hub.set_recorder(writer.record)
-        logging.info("recording history to %s/YYYY-MM-DD.json", history_dir)
+        logging.info("recording history to %s/YYYY-MM-DD.jsonl", history_dir)
 
     source = source_factory(config, hub) if source_factory else None
 
@@ -106,6 +107,10 @@ async def _serve_with_source(
         await hub.reconcile_participants(new_config.participants)
         if source is not None and hasattr(source, "apply"):
             await source.apply(new_config.participants)
+        if writer is not None:
+            # Re-describe the session so the history header reflects the new
+            # participant set/order.
+            writer.start_session(new_config.participants)
         logging.info("applied config change (%d participants)", len(new_config.participants))
 
     runner, port = await run_server(

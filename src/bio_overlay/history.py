@@ -1,70 +1,125 @@
-"""Daily on-disk history of collected biometric readings.
+"""Daily on-disk history of collected biometric readings (JSON Lines).
 
-Writes one JSON file per day, named ``YYYY-MM-DD.json``, into a flat history
-directory (git-ignored). Each file is a JSON array of reading records:
+One append-only file per day, ``YYYY-MM-DD.jsonl`` (git-ignored). A session
+header line lists the participants and an absolute start time; each later data
+line carries a time offset in whole seconds (``s``) and the participant's index
+(``p``) into that header — so lines stay tiny with no repeated metadata:
 
-    [
-      {
-        "t": "2026-06-26T10:15:03.123-07:00",
-        "participantId": "mike-koss",
-        "deviceId": "16CD9E3C",
-        "bpm": 78,
-        "rrIntervalsMs": [776.4]
-      },
-      ...
-    ]
+    {"session": "2026-06-26T10:15:03.123-07:00",
+     "participants": [{"id": "mike-koss", "name": "Mike", "deviceId": "16CD9E3C"}]}
+    {"s": 0, "p": 0, "bpm": 78, "rr": [776.4]}
+    {"s": 5, "p": 0, "bpm": 80, "rr": [751.0, 769.2, 742.1, 760.5, 733.8]}
 
-Records are buffered in memory and flushed atomically (temp file + rename) on a
-debounced background task and on close, so a crash can't leave a half-written
-file. If a file for the current day already exists (e.g. the server was
-restarted), it is loaded and appended to rather than overwritten. The writer
-rolls over to a new file automatically at midnight.
+A new session header is written at startup, on a live config change, and at
+midnight rollover, so each file is self-describing. ``read_records`` resolves the
+header + offsets back into absolute records.
 
-Only real collected data is recorded; the simulator does not use this writer.
+Readings arrive ~1/s, but the writer keeps at most one data line per participant
+every ``min_interval_s`` seconds (5s → 12/min). RR intervals between lines are
+batched into the next line so no beat-to-beat data is lost. Each line is flushed
+as written, so a crash loses at most the last buffered line. Only real collected
+data is recorded; the simulator does not use this writer.
 """
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import json
 import logging
-import os
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .telemetry import ParticipantState
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_FLUSH_INTERVAL_S = 5.0
+DEFAULT_MIN_INTERVAL_S = 5.0
 
 
 def read_records(directory: str | Path, date_str: str) -> list[dict]:
-    """Return the records for one day, or [] if the file is missing/unreadable."""
-    path = Path(directory) / f"{date_str}.json"
+    """Return the day's readings as absolute records: {t, p, bpm, rr}.
+
+    Resolves the compact ``session`` header + ``s``/``p`` (relative seconds and
+    participant index) layout into absolute ISO timestamps and participant ids,
+    so callers don't deal with the on-disk format.
+    """
+    path = Path(directory) / f"{date_str}.jsonl"
     if not path.exists():
         return []
+    out: list[dict] = []
+    session_start: datetime | None = None
+    ids: list[str] = []
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (ValueError, OSError) as exc:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue  # torn final line from a crash
+            if "session" in rec:
+                try:
+                    session_start = datetime.fromisoformat(rec["session"])
+                except (ValueError, TypeError):
+                    session_start = None
+                ids = [p.get("id") for p in rec.get("participants", [])]
+                continue
+            if session_start is None or "s" not in rec or "p" not in rec:
+                continue
+            idx = rec["p"]
+            if not isinstance(idx, int) or idx < 0 or idx >= len(ids):
+                continue
+            t = session_start + timedelta(seconds=rec["s"])
+            out.append(
+                {
+                    "t": t.isoformat(timespec="milliseconds"),
+                    "p": ids[idx],
+                    "bpm": rec.get("bpm"),
+                    "rr": rec.get("rr") or [],
+                }
+            )
+    except OSError as exc:
         logger.warning("could not read history %s: %s", path, exc)
-        return []
+    return out
+
+
+@dataclass
+class _Pending:
+    last_ms: int | None = None
+    rr: list[float] = field(default_factory=list)
+    bpm: int = 0
+    at: datetime | None = None
 
 
 class DailyHistoryWriter:
     def __init__(
-        self, directory: str | Path, flush_interval_s: float = DEFAULT_FLUSH_INTERVAL_S
+        self, directory: str | Path, min_interval_s: float = DEFAULT_MIN_INTERVAL_S
     ) -> None:
         self._dir = Path(directory)
         self._dir.mkdir(parents=True, exist_ok=True)
-        self._flush_interval_s = flush_interval_s
+        self._min_interval_ms = int(min_interval_s * 1000)
         self._date: str | None = None
-        self._records: list[dict] = []
-        self._dirty = False
-        self._flush_task: asyncio.Task | None = None
+        self._fh = None
+        self._pending: dict[str, _Pending] = {}
+        self._meta: list[dict] = []
+        self._index: dict[str, int] = {}
+        self._session_start: datetime | None = None
+        self._need_header = False
 
     # -- public API -------------------------------------------------------
+
+    def start_session(self, participants) -> None:
+        """Record the participant set; a session header is written before the
+        next data line (anchored to that reading's time). Call at startup and
+        whenever the config changes."""
+        self._meta = [
+            {"id": p.id, "name": p.display_name, "deviceId": p.device_id}
+            for p in participants
+        ]
+        self._index = {p.id: i for i, p in enumerate(participants)}
+        self._need_header = True
+        self._session_start = None
 
     def record(
         self,
@@ -73,69 +128,73 @@ class DailyHistoryWriter:
         rr_intervals_ms: list[float],
         at: datetime,
     ) -> None:
-        """Append one reading. Matches the telemetry Recorder signature."""
+        """Buffer one reading; write a line at most once per interval per participant."""
         date_str = at.strftime("%Y-%m-%d")
         if date_str != self._date:
             self._rollover(date_str)
-        self._records.append(
-            {
-                "t": at.isoformat(timespec="milliseconds"),
-                "participantId": state.participant_id,
-                "deviceId": state.device_id,
-                "bpm": bpm,
-                "rrIntervalsMs": list(rr_intervals_ms),
-            }
-        )
-        self._dirty = True
+        if self._need_header:
+            self._write_header(at)
 
-    def start(self) -> None:
-        if self._flush_task is None:
-            self._flush_task = asyncio.create_task(self._flush_loop())
+        at_ms = int(at.timestamp() * 1000)
+        pend = self._pending.setdefault(state.participant_id, _Pending())
+        pend.rr.extend(rr_intervals_ms or [])
+        pend.bpm = bpm
+        pend.at = at
+        if pend.last_ms is None or at_ms - pend.last_ms >= self._min_interval_ms:
+            self._write_line(state.participant_id, pend)
+            pend.last_ms = at_ms
+            pend.rr = []
+
+    def start(self) -> None:  # kept for API symmetry; nothing to schedule
+        pass
 
     async def close(self) -> None:
-        if self._flush_task is not None:
-            self._flush_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._flush_task
-            self._flush_task = None
-        self.flush()
+        for pid, pend in self._pending.items():
+            if pend.rr and pend.at is not None:
+                self._write_line(pid, pend)
+                pend.rr = []
+        if self._fh is not None:
+            self._fh.close()
+            self._fh = None
 
     def path_for(self, date_str: str) -> Path:
-        return self._dir / f"{date_str}.json"
+        return self._dir / f"{date_str}.jsonl"
 
     # -- internals --------------------------------------------------------
 
     def _rollover(self, date_str: str) -> None:
-        # Flush the previous day before switching files.
-        if self._dirty:
-            self.flush()
+        if self._fh is not None:
+            self._fh.close()
         self._date = date_str
-        path = self.path_for(date_str)
-        if path.exists():
-            try:
-                self._records = json.loads(path.read_text(encoding="utf-8"))
-            except (ValueError, OSError) as exc:
-                logger.warning("could not read %s, starting fresh: %s", path, exc)
-                self._records = []
-        else:
-            self._records = []
-        self._dirty = False
-
-    def flush(self) -> None:
-        if not self._dirty or self._date is None:
-            return
-        path = self.path_for(self._date)
-        tmp = path.with_suffix(".json.tmp")
+        self._pending.clear()
+        self._need_header = True  # re-describe the session in the new file
+        self._session_start = None
         try:
-            tmp.write_text(
-                json.dumps(self._records, indent=2) + "\n", encoding="utf-8"
-            )
-            os.replace(tmp, path)  # atomic on POSIX
-            self._dirty = False
+            self._fh = open(self.path_for(date_str), "a", encoding="utf-8")
         except OSError as exc:
-            logger.warning("failed to write history %s: %s", path, exc)
+            logger.warning("could not open history %s: %s", self.path_for(date_str), exc)
+            self._fh = None
 
-    async def _flush_loop(self) -> None:
-        while True:
-            await asyncio.sleep(self._flush_interval_s)
-            self.flush()
+    def _write_header(self, at: datetime) -> None:
+        self._session_start = at
+        self._need_header = False
+        self._emit({"session": at.isoformat(timespec="milliseconds"), "participants": self._meta})
+
+    def _write_line(self, participant_id: str, pend: _Pending) -> None:
+        idx = self._index.get(participant_id)
+        if idx is None or pend.at is None or self._session_start is None:
+            return
+        secs = int((pend.at - self._session_start).total_seconds())
+        rec = {"s": max(0, secs), "p": idx, "bpm": pend.bpm}
+        if pend.rr:
+            rec["rr"] = [round(x, 1) for x in pend.rr]
+        self._emit(rec)
+
+    def _emit(self, rec: dict) -> None:
+        if self._fh is None:
+            return
+        try:
+            self._fh.write(json.dumps(rec) + "\n")
+            self._fh.flush()
+        except OSError as exc:
+            logger.warning("failed to write history line: %s", exc)

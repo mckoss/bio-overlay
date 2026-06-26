@@ -1,67 +1,87 @@
-"""Tests for the daily on-disk history writer."""
+"""Tests for the daily JSON Lines history writer (session header + offsets)."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from bio_overlay.history import DailyHistoryWriter
+from bio_overlay.config import ParticipantConfig
+from bio_overlay.history import DailyHistoryWriter, read_records
 from bio_overlay.telemetry import ParticipantState
 
 
-def _state():
-    return ParticipantState(
-        participant_id="mike-koss", display_name="Mike", device_id="16CD9E3C"
-    )
+def _state(pid="mike-koss"):
+    return ParticipantState(participant_id=pid, display_name="Mike", device_id="16CD9E3C")
 
 
-def _at(day="2026-06-26", hour=10, minute=15, second=3):
-    return datetime(2026, 6, 26, hour, minute, second, 123000, tzinfo=timezone.utc)
+def _participants(*ids):
+    return [ParticipantConfig(id=i, display_name=i.title(), device_id=i.upper()) for i in ids]
 
 
-def test_writes_daily_file_named_by_date(tmp_path):
+def _at(second=3, ms=123000):
+    return datetime(2026, 6, 26, 10, 15, second, ms, tzinfo=timezone.utc)
+
+
+def _lines(path):
+    return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+
+
+async def test_session_header_then_offset_lines(tmp_path):
     w = DailyHistoryWriter(tmp_path)
-    w.record(_state(), 78, [776.4], _at())
-    w.flush()
+    w.start_session(_participants("mike-koss"))
+    w.record(_state(), 78, [776.4], _at(second=3))
+    w.record(_state(), 80, [751.0], _at(second=9))  # +6s -> new line
+    await w.close()
 
-    path = tmp_path / "2026-06-26.json"
-    assert path.exists()
-    records = json.loads(path.read_text())
-    assert len(records) == 1
-    rec = records[0]
-    assert rec["participantId"] == "mike-koss"
-    assert rec["deviceId"] == "16CD9E3C"
-    assert rec["bpm"] == 78
-    assert rec["rrIntervalsMs"] == [776.4]
-    assert rec["t"].startswith("2026-06-26T10:15:03")
+    recs = _lines(tmp_path / "2026-06-26.jsonl")
+    assert recs[0]["session"] == "2026-06-26T10:15:03.123+00:00"
+    assert recs[0]["participants"] == [
+        {"id": "mike-koss", "name": "Mike-Koss", "deviceId": "MIKE-KOSS"}
+    ]
+    # Data lines use seconds-offset + participant index, not repeated metadata.
+    assert recs[1] == {"s": 0, "p": 0, "bpm": 78, "rr": [776.4]}
+    assert recs[2] == {"s": 6, "p": 0, "bpm": 80, "rr": [751.0]}
 
 
-def test_flush_is_noop_when_not_dirty(tmp_path):
+async def test_read_records_resolves_to_absolute(tmp_path):
     w = DailyHistoryWriter(tmp_path)
-    w.flush()  # nothing recorded yet
-    assert list(tmp_path.iterdir()) == []
+    w.start_session(_participants("alice", "bob"))
+    w.record(_state("alice"), 70, [800.0], _at(second=0, ms=0))
+    w.record(_state("bob"), 90, [600.0], _at(second=0, ms=0))
+    await w.close()
+
+    recs = read_records(tmp_path, "2026-06-26")
+    by_p = {r["p"]: r for r in recs}
+    assert set(by_p) == {"alice", "bob"}
+    assert by_p["alice"]["bpm"] == 70
+    assert by_p["bob"]["bpm"] == 90
+    assert by_p["alice"]["t"].startswith("2026-06-26T10:15:00")
 
 
-def test_appends_to_existing_file_for_same_day(tmp_path):
-    # First writer session.
-    w1 = DailyHistoryWriter(tmp_path)
-    w1.record(_state(), 70, [], _at(second=1))
-    w1.flush()
+async def test_throttle_batches_rr(tmp_path):
+    w = DailyHistoryWriter(tmp_path, min_interval_s=5.0)
+    w.start_session(_participants("mike-koss"))
+    base = _at(second=0, ms=0)
+    for i in range(12):  # 12 readings over 11s, 1/s
+        w.record(_state(), 70 + i, [800.0], base + timedelta(seconds=i))
+    await w.close()
 
-    # Second session same day (e.g. server restart) should append, not clobber.
-    w2 = DailyHistoryWriter(tmp_path)
-    w2.record(_state(), 72, [], _at(second=2))
-    w2.flush()
-
-    records = json.loads((tmp_path / "2026-06-26.json").read_text())
-    assert [r["bpm"] for r in records] == [70, 72]
+    data = [r for r in _lines(tmp_path / "2026-06-26.jsonl") if "s" in r]
+    assert len(data) <= 4  # ~1 line per 5s, plus close() remainder
+    # No RR dropped: 12 readings -> 12 batched rr values across the lines.
+    assert sum(len(r.get("rr", [])) for r in data) == 12
 
 
-def test_rolls_over_to_new_file_at_midnight(tmp_path):
+async def test_rollover_writes_new_header(tmp_path):
     w = DailyHistoryWriter(tmp_path)
+    w.start_session(_participants("mike-koss"))
     w.record(_state(), 80, [], datetime(2026, 6, 26, 23, 59, 59, tzinfo=timezone.utc))
     w.record(_state(), 81, [], datetime(2026, 6, 27, 0, 0, 1, tzinfo=timezone.utc))
-    w.flush()
+    await w.close()
 
-    day1 = json.loads((tmp_path / "2026-06-26.json").read_text())
-    day2 = json.loads((tmp_path / "2026-06-27.json").read_text())
-    assert [r["bpm"] for r in day1] == [80]
-    assert [r["bpm"] for r in day2] == [81]
+    d1 = _lines(tmp_path / "2026-06-26.jsonl")
+    d2 = _lines(tmp_path / "2026-06-27.jsonl")
+    assert "session" in d1[0] and "session" in d2[0]  # each file self-describes
+    assert d1[1]["bpm"] == 80 and d2[1]["bpm"] == 81
+
+
+def test_read_records_missing_returns_empty(tmp_path):
+    assert read_records(tmp_path, "2026-01-01") == []
