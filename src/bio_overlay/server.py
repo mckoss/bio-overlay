@@ -17,7 +17,7 @@ import json
 import logging
 from pathlib import Path
 
-from aiohttp import WSMsgType, web
+from aiohttp import WSCloseCode, WSMsgType, web
 
 from .telemetry import TelemetryHub
 
@@ -39,6 +39,7 @@ async def _ws_handler(request: web.Request) -> web.WebSocketResponse:
     # Send current state immediately so a freshly loaded overlay isn't blank.
     await send(hub.snapshot())
     hub.subscribe(send)
+    request.app["websockets"].add(ws)
 
     try:
         async for msg in ws:
@@ -47,8 +48,15 @@ async def _ws_handler(request: web.Request) -> web.WebSocketResponse:
                 logger.warning("ws error: %s", ws.exception())
     finally:
         hub.unsubscribe(send)
+        request.app["websockets"].discard(ws)
         logger.info("overlay client disconnected (%s)", request.remote)
     return ws
+
+
+async def _on_shutdown(app: web.Application) -> None:
+    """Close open overlay sockets so shutdown doesn't wait on their heartbeat."""
+    for ws in set(app["websockets"]):
+        await ws.close(code=WSCloseCode.GOING_AWAY, message=b"server shutdown")
 
 
 async def _index(request: web.Request) -> web.FileResponse:
@@ -62,6 +70,8 @@ async def _healthz(_request: web.Request) -> web.Response:
 def build_app(hub: TelemetryHub) -> web.Application:
     app = web.Application()
     app["hub"] = hub
+    app["websockets"] = set()
+    app.on_shutdown.append(_on_shutdown)
     app.add_routes(
         [
             web.get("/", _index),
