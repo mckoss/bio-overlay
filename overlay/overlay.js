@@ -4,8 +4,10 @@
  * auto-reconnecting with backoff.
  *
  * Each panel shows the live BPM, a sparkline of the last 5 minutes (with the
- * window's min/max), and whole-session min/avg/max. History is kept in memory
- * only and resets when the page reloads (no biometric data is stored).
+ * window's min/max), and whole-session min/avg/max. The server is the source of
+ * truth for history: every snapshot carries the sparkline samples and session
+ * stats, so this client is a stateless renderer and a page/OBS reload restores
+ * the full sparkline and stats immediately.
  */
 
 (() => {
@@ -36,8 +38,6 @@
 
   // participantId -> { root, nameEl, bpmEl, sparkEl, maxEl, minEl, sessionEl, badgeEl }
   const panels = new Map();
-  // participantId -> { samples: [{t, bpm}], lastAt, sMin, sMax, sSum, sCount }
-  const histories = new Map();
   let reconnectDelay = RECONNECT_MIN_MS;
 
   function wsUrl() {
@@ -76,14 +76,6 @@
 
     panel = { root, nameEl, bpmEl, sparkEl, maxEl, minEl, sessionEl, badgeEl };
     panels.set(participantId, panel);
-    histories.set(participantId, {
-      samples: [],
-      lastAt: null,
-      sMin: null,
-      sMax: null,
-      sSum: 0,
-      sCount: 0,
-    });
     return panel;
   }
 
@@ -94,30 +86,13 @@
     return node;
   }
 
-  function recordSample(hist, bpm, atMs) {
-    hist.samples.push({ t: atMs, bpm });
-    hist.lastAt = atMs;
-    hist.sMin = hist.sMin == null ? bpm : Math.min(hist.sMin, bpm);
-    hist.sMax = hist.sMax == null ? bpm : Math.max(hist.sMax, bpm);
-    hist.sSum += bpm;
-    hist.sCount += 1;
-  }
-
   function renderParticipant(p) {
     const panel = ensurePanel(p.participantId);
-    const hist = histories.get(p.participantId);
     panel.nameEl.textContent = p.displayName;
 
-    // A reading counts only when it's a live, fresh, non-zero BPM. bpm == 0 is
-    // the H10 reporting "no heartbeat detected" (loose contact), not real data.
+    // bpm == 0 is the H10 reporting "no heartbeat detected" (loose contact).
     const live = p.connected && !p.stale && p.bpm != null && p.bpm > 0;
-    const atMs = p.updatedAt ? new Date(p.updatedAt).getTime() : NaN;
-    if (live && Number.isFinite(atMs) && atMs !== hist.lastAt) {
-      recordSample(hist, p.bpm, atMs);
-    }
-
-    const offline = !live;
-    panel.root.classList.toggle("stale", offline);
+    panel.root.classList.toggle("stale", !live);
 
     if (p.bpm != null) {
       panel.bpmEl.textContent = String(p.bpm);
@@ -127,17 +102,17 @@
       panel.bpmEl.textContent = "--";
     }
 
-    renderSparkline(panel, hist);
-    renderSession(panel, hist);
+    // History comes from the server, so a reload restores it immediately.
+    renderSparkline(panel, p.samples || []);
+    renderSession(panel, p.session);
     panel.badgeEl.textContent = "";
   }
 
-  function renderSparkline(panel, hist) {
-    // Keep only the last WINDOW_MS of samples in memory.
-    const now = Date.now();
-    const cutoff = now - WINDOW_MS;
-    const s = hist.samples;
-    while (s.length && s[0].t < cutoff) s.shift();
+  function renderSparkline(panel, samples) {
+    // Only draw samples within the window; older points (e.g. frozen during a
+    // disconnect) are clipped relative to the client's clock.
+    const cutoff = Date.now() - WINDOW_MS;
+    const s = samples.filter(([t]) => t >= cutoff);
 
     if (!s.length) {
       panel.sparkEl.innerHTML = "";
@@ -148,9 +123,9 @@
 
     let lo = Infinity;
     let hi = -Infinity;
-    for (const pt of s) {
-      if (pt.bpm < lo) lo = pt.bpm;
-      if (pt.bpm > hi) hi = pt.bpm;
+    for (const [, bpm] of s) {
+      if (bpm < lo) lo = bpm;
+      if (bpm > hi) hi = bpm;
     }
     panel.maxEl.textContent = String(hi);
     panel.minEl.textContent = String(lo);
@@ -160,32 +135,31 @@
     const x = (t) => ((t - cutoff) / WINDOW_MS) * SPARK_W;
     const y = (bpm) => SPARK_PAD_Y + (1 - (bpm - lo) / span) * innerH;
 
-    const pts = s.map((pt) => `${x(pt.t).toFixed(1)},${y(pt.bpm).toFixed(1)}`);
-    const last = s[s.length - 1];
+    const pts = s.map(([t, bpm]) => `${x(t).toFixed(1)},${y(bpm).toFixed(1)}`);
+    const [lastT, lastBpm] = s[s.length - 1];
     const area =
-      `M ${x(s[0].t).toFixed(1)},${SPARK_H} ` +
-      pts.map((p) => `L ${p}`).join(" ") +
-      ` L ${x(last.t).toFixed(1)},${SPARK_H} Z`;
+      `M ${x(s[0][0]).toFixed(1)},${SPARK_H} ` +
+      pts.map((pt) => `L ${pt}`).join(" ") +
+      ` L ${x(lastT).toFixed(1)},${SPARK_H} Z`;
 
     panel.sparkEl.innerHTML =
       `<svg viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none">` +
       `<path class="spark-area" d="${area}"/>` +
       `<polyline class="spark-line" points="${pts.join(" ")}"/>` +
-      `<circle class="spark-dot" cx="${x(last.t).toFixed(1)}" cy="${y(last.bpm).toFixed(1)}" r="2.5"/>` +
+      `<circle class="spark-dot" cx="${x(lastT).toFixed(1)}" cy="${y(lastBpm).toFixed(1)}" r="2.5"/>` +
       `</svg>`;
   }
 
-  function renderSession(panel, hist) {
-    if (!hist.sCount) {
+  function renderSession(panel, session) {
+    if (!session || !session.count) {
       panel.sessionEl.innerHTML = "";
       return;
     }
-    const avg = Math.round(hist.sSum / hist.sCount);
     panel.sessionEl.innerHTML =
       `<span>session</span>` +
-      `<span>min <b>${hist.sMin}</b></span>` +
-      `<span>avg <b>${avg}</b></span>` +
-      `<span>max <b>${hist.sMax}</b></span>`;
+      `<span>min <b>${session.min}</b></span>` +
+      `<span>avg <b>${session.avg}</b></span>` +
+      `<span>max <b>${session.max}</b></span>`;
   }
 
   function render(state) {
@@ -199,7 +173,6 @@
       if (!seen.has(id)) {
         panel.root.remove();
         panels.delete(id);
-        histories.delete(id);
       }
     }
   }
