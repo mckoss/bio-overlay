@@ -33,14 +33,29 @@ def _load_config(args: argparse.Namespace) -> AppConfig:
 def _build_hub(config: AppConfig) -> TelemetryHub:
     hub = TelemetryHub(stale_after_s=config.stale_after_seconds)
     for p in config.participants:
-        hub.register_participant(p.id, p.display_name)
+        hub.register_participant(p.id, p.display_name, device_id=p.device_id)
     return hub
 
 
-async def _serve_with_source(config: AppConfig, source_factory) -> None:
-    """Run the server alongside a telemetry source (collector or simulator)."""
+async def _serve_with_source(
+    config: AppConfig, source_factory, *, history_dir: str | None = None
+) -> None:
+    """Run the server alongside a telemetry source (collector or simulator).
+
+    If history_dir is given, real readings are persisted to a daily JSON file.
+    """
     hub = _build_hub(config)
     hub.start_watchdog()
+
+    writer = None
+    if history_dir:
+        from .history import DailyHistoryWriter
+
+        writer = DailyHistoryWriter(history_dir)
+        writer.start()
+        hub.set_recorder(writer.record)
+        logging.info("recording history to %s/YYYY-MM-DD.json", history_dir)
+
     runner = await run_server(hub, config.host, config.port)
     source = source_factory(config, hub)
 
@@ -60,6 +75,8 @@ async def _serve_with_source(config: AppConfig, source_factory) -> None:
         source.stop()
         source_task.cancel()
         await hub.stop_watchdog()
+        if writer is not None:
+            await writer.close()
         await runner.cleanup()
 
 
@@ -103,9 +120,11 @@ async def _cmd_run(args: argparse.Namespace) -> None:
     from .ble_collector import BleCollector
 
     config = _load_config(args)
+    history_dir = None if args.no_history else args.history_dir
     await _serve_with_source(
         config,
         lambda cfg, hub: BleCollector(cfg.participants, hub),
+        history_dir=history_dir,
     )
 
 
@@ -140,6 +159,19 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("-c", "--config", help="path to config.json")
         p.add_argument("--host", help="server bind host (default 127.0.0.1)")
         p.add_argument("--port", type=int, help="server port (default 8080)")
+        if name == "run":
+            # Real readings are persisted to history/YYYY-MM-DD.json; simulated
+            # data is never written there.
+            p.add_argument(
+                "--history-dir",
+                default="history",
+                help="directory for daily history files (default ./history)",
+            )
+            p.add_argument(
+                "--no-history",
+                action="store_true",
+                help="do not write the daily history file",
+            )
         p.set_defaults(func=func)
 
     return parser

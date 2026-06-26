@@ -55,6 +55,19 @@ no `deviceId` is set.
 Resolution order in the collector: `deviceId` > `address` > first strap matching
 `namePrefix`.
 
+### Session history
+
+- **Live/overlay history is server-side.** The hub keeps a rolling 5-minute
+  sparkline window plus whole-session min/max/avg per participant and sends them
+  in every snapshot, so a page reload / OBS scene reload / reconnect restores the
+  sparkline and stats. History accrues even when no overlay is connected.
+- **Daily on-disk history.** `run` writes every real reading to
+  `history/YYYY-MM-DD.json` (git-ignored), a JSON array of
+  `{t, participantId, deviceId, bpm, rrIntervalsMs}`. Flushed atomically on a
+  timer and on shutdown; appends to an existing file for the day; rolls over at
+  midnight. Disable with `--no-history`, or relocate with `--history-dir DIR`.
+  `simulate` never writes history.
+
 ### Notes from real-hardware testing (H10 `16CD9E3C`)
 
 - RR intervals are present in **every** notification (good for the respiration

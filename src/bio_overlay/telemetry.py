@@ -39,6 +39,7 @@ class ParticipantState:
 
     participant_id: str
     display_name: str
+    device_id: str | None = None
     bpm: int | None = None
     rr_intervals_ms: list[float] = field(default_factory=list)
     connected: bool = False
@@ -89,6 +90,8 @@ class ParticipantState:
 
 
 Subscriber = Callable[[dict], Awaitable[None]]
+# Called for each valid (non-zero) reading: (state, bpm, rr_intervals_ms, at).
+Recorder = Callable[["ParticipantState", int, list, datetime], None]
 
 
 class TelemetryHub:
@@ -104,14 +107,25 @@ class TelemetryHub:
         self._stale_after_s = stale_after_s
         self._history_window_ms = int(history_window_s * 1000)
         self._watchdog_task: asyncio.Task | None = None
+        self._recorder: Recorder | None = None
 
     # -- registration -----------------------------------------------------
 
-    def register_participant(self, participant_id: str, display_name: str) -> None:
+    def register_participant(
+        self, participant_id: str, display_name: str, device_id: str | None = None
+    ) -> None:
         self._participants.setdefault(
             participant_id,
-            ParticipantState(participant_id=participant_id, display_name=display_name),
+            ParticipantState(
+                participant_id=participant_id,
+                display_name=display_name,
+                device_id=device_id,
+            ),
         )
+
+    def set_recorder(self, recorder: Recorder | None) -> None:
+        """Register a sink called for each valid reading (e.g. a history file)."""
+        self._recorder = recorder
 
     def subscribe(self, callback: Subscriber) -> None:
         self._subscribers.add(callback)
@@ -150,6 +164,8 @@ class TelemetryHub:
         # not a real reading — keep it out of the sparkline and session stats.
         if bpm > 0:
             state.record(bpm, int(now.timestamp() * 1000), self._history_window_ms)
+            if self._recorder is not None:
+                self._recorder(state, bpm, state.rr_intervals_ms, now)
         await self._broadcast()
 
     async def set_connected(self, participant_id: str, connected: bool) -> None:

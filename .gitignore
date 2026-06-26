@@ -12,3 +12,6 @@ build/
 # Local participant/strap bindings (may contain personal device UUIDs).
 config.json
 
+# Collected biometric history (daily YYYY-MM-DD.json files).
+history/
+
