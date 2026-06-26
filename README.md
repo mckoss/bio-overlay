@@ -8,13 +8,18 @@ send the composited video to a remote trainer through Zoom.
 
 ## Current Status
 
-Planning repo. The first milestone is a local proof of concept:
+Scaffolding for the local proof of concept is in place and the full
+telemetry → overlay path runs **without hardware** via a built-in simulator. The
+BLE collector is wired and waiting for the Polar H10 straps.
 
-1. Discover and connect to one Polar H10 from a Mac.
-2. Parse the standard Bluetooth LE Heart Rate Measurement characteristic.
-3. Publish live BPM updates to a local WebSocket server.
-4. Render a transparent OBS Browser Source overlay.
-5. Extend the pipeline to two straps.
+1. ✅ Parse the standard Bluetooth LE Heart Rate Measurement characteristic (`hr_parser`, unit-tested).
+2. ✅ Publish live BPM updates to a local WebSocket server (`server` + `telemetry`).
+3. ✅ Render a transparent OBS Browser Source overlay (`overlay/`).
+4. ✅ Simulator so the server + overlay can be tested with no straps.
+5. ⏳ Discover/connect to real Polar H10 straps (`ble_collector`, needs hardware).
+
+See [docs/development.md](docs/development.md) for the handoff notes, including
+the macOS Bluetooth permission step.
 
 Respiration-rate display is an optional later feature. The design treats it as
 experimental until validated against real RR-interval or ECG data from the straps.
@@ -32,13 +37,23 @@ git clone https://github.com/mckoss/bio-overlay.git
 cd bio-overlay
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install bleak
+python -m pip install -e ".[dev]"
 ```
 
-The repo is currently documentation-only. The first code to write on the Mac is
-a single-strap `bleak` spike that discovers a Polar H10 and prints parsed BPM
-packets.
+Try it with no hardware:
+
+```bash
+bio-overlay simulate          # then open http://127.0.0.1:8080/
+```
+
+With hardware (the first BLE access triggers a macOS Bluetooth permission prompt
+— Allow it):
+
+```bash
+cp config.example.json config.json
+bio-overlay scan              # copy each strap's macOS UUID into config.json
+bio-overlay run -c config.json
+```
 
 ## Intended Runtime Shape
 

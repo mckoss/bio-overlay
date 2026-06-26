@@ -1,0 +1,150 @@
+/*
+ * Transparent overlay styling for OBS Browser Source.
+ * Background is fully transparent so OBS composites it over video.
+ * Targets 1920x1080 but scales to 1280x720 via relative units.
+ */
+
+:root {
+  --panel-bg: rgba(0, 0, 0, 0.55);
+  --panel-stale-bg: rgba(60, 0, 0, 0.55);
+  --accent: #ff4d4f;
+  --text: #ffffff;
+  --muted: rgba(255, 255, 255, 0.55);
+  --radius: 0.6rem;
+  font-size: clamp(14px, 1.4vw, 22px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent; /* critical for OBS transparency */
+  overflow: hidden;
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  /* Strong text shadow keeps numerals readable over busy video / Zoom compression. */
+  text-shadow: 0 0.1rem 0.4rem rgba(0, 0, 0, 0.9);
+}
+
+.panels {
+  position: absolute;
+  top: 2.5vh;
+  left: 2.5vw;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.panel {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 1rem;
+  padding: 0.8rem 1.4rem;
+  min-width: 14rem;
+  background: var(--panel-bg);
+  border-radius: var(--radius);
+  border-left: 0.4rem solid var(--accent);
+  backdrop-filter: blur(2px);
+  transition: opacity 0.3s ease, background 0.3s ease;
+}
+
+.panel .name {
+  grid-column: 1 / 3;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.panel .bpm {
+  font-size: 4.2rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel .unit {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--muted);
+  align-self: end;
+  padding-bottom: 0.5rem;
+}
+
+/* Heart pulses at the current BPM (period set inline via --beat). */
+.panel .name::before {
+  content: "\2665"; /* ♥ */
+  color: var(--accent);
+  margin-right: 0.4rem;
+  display: inline-block;
+  animation: beat var(--beat, 1s) ease-in-out infinite;
+}
+
+@keyframes beat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  15% {
+    transform: scale(1.35);
+  }
+  30% {
+    transform: scale(1);
+  }
+}
+
+/* Disconnected / stale states keep the layout stable but signal clearly. */
+.panel.stale {
+  background: var(--panel-stale-bg);
+  border-left-color: var(--muted);
+}
+
+.panel.stale .bpm {
+  color: var(--muted);
+}
+
+.panel.stale .name::before {
+  animation: none;
+  opacity: 0.4;
+}
+
+.panel .badge {
+  grid-column: 1 / 3;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  min-height: 1rem;
+}
+
+.panel.stale .badge::after {
+  content: "no signal";
+  color: #ffb020;
+}
+
+/* Tiny WS connection dot, hidden by default in normal operation. */
+.conn-status {
+  position: absolute;
+  bottom: 1vh;
+  right: 1vw;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #888;
+  opacity: 0.35;
+}
+
+.conn-status.online {
+  background: #2ecc71;
+}
+
+.conn-status.offline {
+  background: var(--accent);
+}

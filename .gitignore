@@ -7,4 +7,8 @@ dist/
 build/
 .env
 .env.*
+*.egg-info/
+
+# Local participant/strap bindings (may contain personal device UUIDs).
+config.json
 
