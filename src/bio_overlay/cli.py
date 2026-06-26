@@ -4,10 +4,9 @@ Subcommands:
     scan       Discover nearby BLE straps and print their device IDs.
     run        Start the telemetry server + BLE collector (needs hardware).
     simulate   Start the telemetry server + simulated data (no hardware).
-    config     Serve only the setup page (/config) to edit config and pair straps.
 
 `run` and `simulate` serve the overlay at http://<host>:<port>/ for use as an
-OBS Browser Source; all three serving commands also expose /config.
+OBS Browser Source, and the setup page at /config to edit config and pair straps.
 """
 
 from __future__ import annotations
@@ -22,7 +21,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import AppConfig
-from .paths import default_config_path, default_history_dir, is_frozen
+from .paths import default_config_path, default_history_dir
 from .server import run_server
 from .telemetry import TelemetryHub
 
@@ -42,12 +41,8 @@ def _load_config(args: argparse.Namespace) -> AppConfig:
 
 
 def _should_open_browser(args: argparse.Namespace) -> bool:
-    """Auto-open the setup page when packaged, unless told not to."""
-    if getattr(args, "open", False):
-        return True
-    if getattr(args, "no_browser", False):
-        return False
-    return is_frozen()
+    """Auto-open the setup page on start unless told not to (same in repo & exe)."""
+    return not getattr(args, "no_browser", False)
 
 
 def _browser_host(host: str) -> str:
@@ -156,7 +151,7 @@ async def _cmd_scan(args: argparse.Namespace) -> None:
         print()
     print("Put the deviceId into config.json under the matching participant, e.g.:")
     print('    { "id": "participant-1", "displayName": "Alice", "deviceId": "16CD9E3C" }')
-    print("Or use the setup page: run `bio-overlay config` and open /config in a browser.")
+    print("Or use the setup page at /config while running `bio-overlay run`.")
 
 
 async def _cmd_run(args: argparse.Namespace) -> None:
@@ -187,18 +182,6 @@ async def _cmd_simulate(args: argparse.Namespace) -> None:
     )
 
 
-async def _cmd_config(args: argparse.Namespace) -> None:
-    """Serve just the setup/config page (no collector) for pairing straps."""
-    config = _load_config(args)
-    print(f"Setup page: http://{_browser_host(config.host)}:{config.port}/config")
-    await _serve_with_source(
-        config,
-        None,  # no telemetry source — leaves BLE free for scanning
-        config_path=_resolve_config_path(args),
-        open_browser=_should_open_browser(args),
-    )
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="bio-overlay", description=__doc__)
     parser.add_argument(
@@ -218,7 +201,6 @@ def build_parser() -> argparse.ArgumentParser:
     for name, func, help_text in (
         ("run", _cmd_run, "collect from real straps and serve the overlay"),
         ("simulate", _cmd_simulate, "serve the overlay with simulated data"),
-        ("config", _cmd_config, "serve the setup page to edit config and pair straps"),
     ):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("-c", "--config", help="path to config.json")
@@ -238,16 +220,11 @@ def build_parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="do not write the daily history file",
             )
-        # Auto-open the setup page in the browser (default on for packaged exe).
-        p.add_argument(
-            "--open",
-            action="store_true",
-            help="open the setup page in a browser on start",
-        )
+        # The setup page opens in the browser on start by default.
         p.add_argument(
             "--no-browser",
             action="store_true",
-            help="do not auto-open the setup page (default for source runs)",
+            help="do not auto-open the setup page in a browser",
         )
         p.set_defaults(func=func)
 
@@ -257,9 +234,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     if argv is None:
         argv = sys.argv[1:]
-    # Double-clicking the packaged executable passes no arguments; default to
-    # `run` so it starts collecting and opens the setup page.
-    if is_frozen() and not argv:
+    # No arguments (e.g. double-clicking the executable, or a bare `bio-overlay`)
+    # defaults to `run`, which starts collecting and opens the setup page.
+    if not argv:
         argv = ["run"]
     args = build_parser().parse_args(argv)
     logging.basicConfig(

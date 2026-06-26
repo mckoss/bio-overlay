@@ -100,16 +100,12 @@ bio-overlay run -c config.json  # then open http://127.0.0.1:8080/
 ### Setup page (no JSON editing)
 
 The easiest way to configure participants and pair straps is the built-in setup
-page:
-
-```bash
-bio-overlay config              # then open http://127.0.0.1:8080/config
-```
+page at `/config`, which opens automatically when you start the app (`bio-overlay`
+or `bio-overlay run`). It's also served at `http://127.0.0.1:8080/config`.
 
 From there you can add/remove participants, edit each one's name/id/deviceId,
-and **Scan** for nearby straps to assign (pair) them to a participant — then
-**Save**. The `config` command runs without the collector so BLE is free for a
-clean scan. Saved changes take effect the next time you start `bio-overlay run`.
+**Scan** for nearby straps to assign (pair) them to a participant, and copy the
+overlay URL for OBS — then **Save**.
 
 ### `config.json` (manual)
 
@@ -184,13 +180,9 @@ Collect from real straps and serve the overlay.
 Serve the overlay with synthetic data (no hardware, no history file written).
 Accepts `-c/--config`, `--host`, `--port` (same as `run`).
 
-### `bio-overlay config`
-Serve only the setup page (`/config`) — no collector, so BLE is free for
-scanning/pairing. Accepts `-c/--config`, `--host`, `--port`.
-
-All three serving commands (`run`, `simulate`, `config`) accept `--open` to
-open the setup page in a browser on start and `--no-browser` to suppress it.
-Auto-open defaults **on** for the packaged executable and **off** from source.
+Running with **no arguments** (e.g. double-clicking the executable, or a bare
+`bio-overlay`) is the same as `run`. Both `run` and `simulate` open the setup
+page in the browser on start; pass `--no-browser` to suppress it.
 
 ## Where files are stored
 
