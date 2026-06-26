@@ -120,6 +120,16 @@ async def _healthz(_request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def _quit(request: web.Request) -> web.Response:
+    """Ask the app to shut down (used by the Quit button on the setup page)."""
+    cb = request.app.get("request_shutdown")
+    if cb is not None:
+        cb()
+        logger.info("shutdown requested via /api/quit")
+        return web.json_response({"ok": True})
+    raise web.HTTPNotImplemented(reason="shutdown not available")
+
+
 # -- config API -----------------------------------------------------------
 
 DEFAULT_CONFIG_PATH = "config.json"
@@ -199,6 +209,7 @@ def build_app(
     config_path: str | None = None,
     apply_config=None,
     history_dir: str | None = None,
+    request_shutdown=None,
 ) -> web.Application:
     app = web.Application()
     app["hub"] = hub
@@ -206,6 +217,7 @@ def build_app(
     app["config_path"] = config_path
     app["apply_config"] = apply_config
     app["history_dir"] = history_dir
+    app["request_shutdown"] = request_shutdown
     app["websockets"] = set()
     app.on_shutdown.append(_on_shutdown)
     app.add_routes(
@@ -220,6 +232,7 @@ def build_app(
             web.get("/api/scan", _scan),
             web.get("/api/history", _api_history),
             web.get("/api/history/{id}", _api_session),
+            web.post("/api/quit", _quit),
         ]
     )
     # Serve remaining overlay assets (css/js) as static files.
@@ -257,6 +270,7 @@ async def run_server(
     apply_config=None,
     port_scan: bool = False,
     history_dir: str | None = None,
+    request_shutdown=None,
 ) -> tuple[web.AppRunner, int]:
     """Start the server; return (runner, actual_port). Caller cleans up the runner."""
     app = build_app(
@@ -265,6 +279,7 @@ async def run_server(
         config_path=config_path,
         apply_config=apply_config,
         history_dir=history_dir,
+        request_shutdown=request_shutdown,
     )
     runner = web.AppRunner(app)
     await runner.setup()

@@ -171,9 +171,24 @@
     });
   }
 
+  async function quit() {
+    if (!confirm("Quit bio-overlay? The overlay will go offline until you start the app again.")) {
+      return;
+    }
+    try {
+      await fetch("/api/quit", { method: "POST" });
+    } catch {
+      // The server closes the connection as it shuts down; that's expected.
+    }
+    document.body.innerHTML =
+      '<main class="wrap"><h1>bio-overlay stopped</h1>' +
+      "<p class='hint'>You can close this tab. Re-open the app to start again.</p></main>";
+  }
+
   document.getElementById("add").addEventListener("click", addParticipant);
   document.getElementById("scan").addEventListener("click", (e) => scan(e.currentTarget));
   document.getElementById("save").addEventListener("click", save);
+  document.getElementById("quit").addEventListener("click", quit);
 
   setupOverlayLinks();
   load();

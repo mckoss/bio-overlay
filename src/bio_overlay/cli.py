@@ -117,6 +117,10 @@ async def _serve_with_source(
     # --no-history), so resolve a directory to read from regardless.
     history_read_dir = history_dir or str(default_history_dir())
 
+    # The Quit button on the setup page POSTs /api/quit, which sets this.
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
     runner, port = await run_server(
         hub,
         config.host,
@@ -126,6 +130,7 @@ async def _serve_with_source(
         apply_config=apply_config,
         port_scan=port_scan,
         history_dir=history_read_dir,
+        request_shutdown=lambda: loop.call_soon_threadsafe(stop.set),
     )
 
     if open_browser:
@@ -136,8 +141,6 @@ async def _serve_with_source(
         except Exception as exc:  # noqa: BLE001 - never fail startup over this
             logging.debug("could not open browser: %s", exc)
 
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
             loop.add_signal_handler(sig, stop.set)

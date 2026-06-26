@@ -150,6 +150,21 @@ select:focus {
   color: #fff;
 }
 
+.btn-danger {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-danger:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.quit-section {
+  margin-top: 1.5rem;
+}
+
 .btn-remove {
   background: transparent;
   border: 1px solid #3a4257;
