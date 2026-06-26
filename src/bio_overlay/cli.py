@@ -22,7 +22,7 @@ from pathlib import Path
 from . import __version__
 from .config import AppConfig
 from .paths import default_config_path, default_history_dir
-from .server import run_server
+from .server import PortInUseError, run_server
 from .telemetry import TelemetryHub
 
 
@@ -64,6 +64,7 @@ async def _serve_with_source(
     history_dir: str | None = None,
     config_path: str | None = None,
     open_browser: bool = False,
+    port_scan: bool = False,
 ) -> None:
     """Run the server alongside a telemetry source (collector or simulator).
 
@@ -101,17 +102,18 @@ async def _serve_with_source(
             await source.apply(new_config.participants)
         logging.info("applied config change (%d participants)", len(new_config.participants))
 
-    runner = await run_server(
+    runner, port = await run_server(
         hub,
         config.host,
         config.port,
         config=config,
         config_path=config_path,
         apply_config=apply_config,
+        port_scan=port_scan,
     )
 
     if open_browser:
-        url = f"http://{_browser_host(config.host)}:{config.port}/config"
+        url = f"http://{_browser_host(config.host)}:{port}/config"
         try:
             webbrowser.open(url)
             logging.info("opened setup page in browser: %s", url)
@@ -179,6 +181,7 @@ async def _cmd_run(args: argparse.Namespace) -> None:
         history_dir=history_dir,
         config_path=_resolve_config_path(args),
         open_browser=_should_open_browser(args),
+        port_scan=args.port_scan,
     )
 
 
@@ -191,6 +194,7 @@ async def _cmd_simulate(args: argparse.Namespace) -> None:
         lambda cfg, hub: Simulator(cfg.participants, hub),
         config_path=_resolve_config_path(args),
         open_browser=_should_open_browser(args),
+        port_scan=args.port_scan,
     )
 
 
@@ -218,6 +222,11 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("-c", "--config", help="path to config.json")
         p.add_argument("--host", help="server bind host (default 127.0.0.1)")
         p.add_argument("--port", type=int, help="server port (default 8080)")
+        p.add_argument(
+            "--port-scan",
+            action="store_true",
+            help="if the port is busy, automatically pick the next free one",
+        )
         if name == "run":
             # Real readings are persisted to history/YYYY-MM-DD.json; simulated
             # data is never written there.
@@ -260,6 +269,19 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(args.func(args))
     except KeyboardInterrupt:
         pass
+    except PortInUseError as exc:
+        port = exc.port
+        prog = "bio-overlay"
+        print(f"\nError: port {port} is already in use.", file=sys.stderr)
+        if exc.last_tried is not None:
+            print(
+                f"Ports {port}–{exc.last_tried} are all busy.", file=sys.stderr
+            )
+        print("Another bio-overlay window may already be running.", file=sys.stderr)
+        print("Fix it by either:", file=sys.stderr)
+        print(f"  • choosing a port:        {prog} --port 8090", file=sys.stderr)
+        print(f"  • auto-picking a free one: {prog} --port-scan", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

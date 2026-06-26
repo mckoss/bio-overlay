@@ -17,6 +17,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import sys
@@ -28,6 +29,18 @@ from .config import AppConfig
 from .telemetry import TelemetryHub
 
 logger = logging.getLogger(__name__)
+
+# When --port-scan is on, try this many ports above the requested one.
+PORT_SCAN_RANGE = 20
+
+
+class PortInUseError(Exception):
+    """Raised when the requested port (and scan range) couldn't be bound."""
+
+    def __init__(self, port: int, last_tried: int | None = None) -> None:
+        self.port = port
+        self.last_tried = last_tried
+        super().__init__(f"port {port} unavailable")
 
 
 def _overlay_dir() -> Path:
@@ -187,6 +200,27 @@ def build_app(
     return app
 
 
+async def _bind(runner: web.AppRunner, host: str, port: int, port_scan: bool) -> int:
+    """Bind the runner to `port`, scanning upward for a free one if requested.
+
+    Returns the port actually bound. Raises PortInUseError if none is free.
+    """
+    last = port + PORT_SCAN_RANGE if port_scan else port
+    candidate = port
+    while candidate <= last:
+        site = web.TCPSite(runner, host, candidate)
+        try:
+            await site.start()
+            return candidate
+        except OSError as exc:
+            if exc.errno not in (errno.EADDRINUSE, errno.EACCES):
+                raise
+            if not port_scan:
+                raise PortInUseError(port) from None
+            candidate += 1
+    raise PortInUseError(port, last)
+
+
 async def run_server(
     hub: TelemetryHub,
     host: str,
@@ -194,13 +228,17 @@ async def run_server(
     config: AppConfig | None = None,
     config_path: str | None = None,
     apply_config=None,
-) -> web.AppRunner:
-    """Start the server and return the runner (caller is responsible for cleanup)."""
+    port_scan: bool = False,
+) -> tuple[web.AppRunner, int]:
+    """Start the server; return (runner, actual_port). Caller cleans up the runner."""
     app = build_app(hub, config=config, config_path=config_path, apply_config=apply_config)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, host, port)
-    await site.start()
-    logger.info("overlay server on http://%s:%d  (OBS Browser Source URL)", host, port)
-    logger.info("config/setup page at http://%s:%d/config", host, port)
-    return runner
+    try:
+        bound = await _bind(runner, host, port, port_scan)
+    except PortInUseError:
+        await runner.cleanup()
+        raise
+    logger.info("overlay server on http://%s:%d  (OBS Browser Source URL)", host, bound)
+    logger.info("config/setup page at http://%s:%d/config", host, bound)
+    return runner, bound

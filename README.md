@@ -173,12 +173,16 @@ Collect from real straps and serve the overlay.
 | `-c, --config PATH` | built-in defaults | Path to `config.json`. |
 | `--host HOST` | `127.0.0.1` | Override the bind host. |
 | `--port PORT` | `8080` | Override the server port. |
+| `--port-scan` | off | If the port is busy, automatically pick the next free one. |
 | `--history-dir DIR` | data dir `/history` | Directory for daily history files. |
 | `--no-history` | off | Don't write the daily history file. |
 
+If the port is in use and `--port-scan` isn't set, bio-overlay prints a short
+message (not a stack trace) suggesting `--port` or `--port-scan`.
+
 ### `bio-overlay simulate`
 Serve the overlay with synthetic data (no hardware, no history file written).
-Accepts `-c/--config`, `--host`, `--port` (same as `run`).
+Accepts `-c/--config`, `--host`, `--port`, `--port-scan`, `--no-browser`.
 
 Running with **no arguments** (e.g. double-clicking the executable, or a bare
 `bio-overlay`) is the same as `run`. Both `run` and `simulate` open the setup
