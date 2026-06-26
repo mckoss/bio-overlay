@@ -23,6 +23,22 @@ experimental until validated against real RR-interval or ECG data from the strap
 
 - [Design](docs/design.md)
 - [Source summary](docs/source-summary.md)
+- [Mac setup notes](docs/mac-setup.md)
+
+## Getting Started on a Mac
+
+```bash
+git clone https://github.com/mckoss/bio-overlay.git
+cd bio-overlay
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install bleak
+```
+
+The repo is currently documentation-only. The first code to write on the Mac is
+a single-strap `bleak` spike that discovers a Polar H10 and prints parsed BPM
+packets.
 
 ## Intended Runtime Shape
 
@@ -47,4 +63,3 @@ Polar H10 #2 -- BLE --+-- WebSocket --> Overlay webpage --> OBS Browser Source
 - Cloud telemetry for the first version.
 - Medical-grade biometric analysis.
 - Storing biometric history by default.
-

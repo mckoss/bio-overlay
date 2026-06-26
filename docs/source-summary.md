@@ -59,3 +59,44 @@ The Gemini content is useful planning input, not authoritative implementation
 evidence. Before relying on advanced metrics, the project should validate actual
 Polar H10 packet contents, macOS BLE behavior, and dual-strap reliability.
 
+## Provided Boilerplate Shape
+
+The Gemini response included a starter Python sketch using `asyncio`,
+`struct`, and `BleakClient`. The important implementation ideas to preserve are:
+
+- Configure two sensors by participant name.
+- On macOS, expect a CoreBluetooth UUID instead of a hardware MAC address.
+- Subscribe to `00002a37-0000-1000-8000-00805f9b34fb`.
+- Parse the first flags byte to determine whether BPM is 8-bit or 16-bit.
+- Use flag bit `0x10` to detect RR intervals.
+- Convert each RR interval from 1/1024-second units to milliseconds.
+- Keep each sensor connection in a retry loop.
+- Feed parsed telemetry into a future WebSocket path rather than only printing.
+
+Representative parser logic from the Gemini sketch:
+
+```python
+flags = data[0]
+hr_16bit = bool(flags & 0x01)
+rr_present = bool(flags & 0x10)
+
+offset = 1
+if hr_16bit:
+    bpm = struct.unpack_into("<H", data, offset)[0]
+    offset += 2
+else:
+    bpm = data[offset]
+    offset += 1
+
+rr_intervals = []
+if rr_present:
+    while offset < len(data):
+        rr_unit = struct.unpack_from("<H", data, offset)[0]
+        rr_ms = (rr_unit / 1024.0) * 1000.0
+        rr_intervals.append(rr_ms)
+        offset += 2
+```
+
+The response also suggested a future respiration estimate by tracking
+RR-interval fluctuations over a rolling window. Keep that out of the first
+milestone until the live strap data proves the signal is stable enough.
