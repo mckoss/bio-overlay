@@ -49,7 +49,17 @@ async def _serve_with_source(
 
     writer = None
     if history_dir:
-        from .history import DailyHistoryWriter
+        from datetime import datetime, timezone
+
+        from .history import DailyHistoryWriter, read_records
+
+        # Restore an in-progress session from today's file so a server restart
+        # mid-session keeps the sparkline, session stats, and respiration.
+        today = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d")
+        seeded = read_records(history_dir, today)
+        if seeded:
+            hub.seed_history(seeded)
+            logging.info("restored %d readings from %s/%s.json", len(seeded), history_dir, today)
 
         writer = DailyHistoryWriter(history_dir)
         writer.start()

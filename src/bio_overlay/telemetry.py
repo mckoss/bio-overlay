@@ -159,6 +159,46 @@ class TelemetryHub:
         """Register a sink called for each valid reading (e.g. a history file)."""
         self._recorder = recorder
 
+    def seed_history(self, records: list[dict]) -> None:
+        """Rebuild session stats and rolling windows from prior records.
+
+        Used at startup to restore an in-progress session after a server
+        restart (records come from today's history file). Records must be in
+        chronological order; unknown participants and zero/invalid readings are
+        skipped. Does not broadcast or re-record — call before set_recorder().
+        """
+        now_ms = int(_now().timestamp() * 1000)
+        spark_cutoff = now_ms - self._history_window_ms
+        rr_cutoff = now_ms - self._resp_window_ms
+        for rec in records:
+            state = self._participants.get(rec.get("participantId"))
+            bpm = rec.get("bpm")
+            ts = rec.get("t")
+            if state is None or not bpm or bpm <= 0 or not ts:
+                continue
+            try:
+                at_ms = int(datetime.fromisoformat(ts).timestamp() * 1000)
+            except ValueError:
+                continue
+            # Whole-session aggregates use every reading from the file.
+            state.session_min = bpm if state.session_min is None else min(state.session_min, bpm)
+            state.session_max = bpm if state.session_max is None else max(state.session_max, bpm)
+            state.session_sum += bpm
+            state.session_count += 1
+            # Rolling windows only keep the recent tail.
+            if at_ms >= spark_cutoff:
+                state.samples.append((at_ms, bpm))
+            if at_ms >= rr_cutoff:
+                for rr in rec.get("rrIntervalsMs") or []:
+                    state.rr_window.append((at_ms, rr))
+        # Restore the respiration estimate from the rebuilt RR window.
+        for state in self._participants.values():
+            if state.rr_window:
+                est = estimate_respiration([rr for _, rr in state.rr_window])
+                if est is not None:
+                    state.respiration_brpm = est.breaths_per_min
+                    state.respiration_confidence = est.confidence
+
     def subscribe(self, callback: Subscriber) -> None:
         self._subscribers.add(callback)
 

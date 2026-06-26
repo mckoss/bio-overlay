@@ -67,6 +67,16 @@ Resolution order in the collector: `deviceId` > `address` > first strap matching
   timer and on shutdown; appends to an existing file for the day; rolls over at
   midnight. Disable with `--no-history`, or relocate with `--history-dir DIR`.
   `simulate` never writes history.
+- **Restart recovery.** On startup `run` reloads today's file
+  (`hub.seed_history`) and rebuilds session stats, the sparkline window, and the
+  respiration estimate, so a mid-session server restart keeps the displayed
+  history. A day's readings are treated as one session (separate same-day
+  sessions merge unless you point `--history-dir` elsewhere).
+- **Respiration (experimental).** `respiration.py` estimates breaths/min from
+  the RR series via RSA (resample → detrend → FFT peak in 0.1–0.5 Hz). The hub
+  keeps a 60s RR window and reports `{breathsPerMin, confidence}`; the overlay
+  shows it labeled EST above a confidence threshold. Validated on synthetic
+  signals; real-world accuracy (esp. during exercise) still needs field checks.
 
 ### Notes from real-hardware testing (H10 `16CD9E3C`)
 

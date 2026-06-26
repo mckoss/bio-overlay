@@ -206,6 +206,19 @@ etc.) works the same way.
   timer and on shutdown, appends to an existing same-day file, and rolls over at
   midnight. Disable with `--no-history` or relocate with `--history-dir`.
   `simulate` never writes history.
+- **Survives server restarts:** on startup `run` reloads today's history file
+  and rebuilds the session stats, sparkline window, and respiration estimate, so
+  restarting the server mid-session keeps the displayed history (note: all of a
+  day's readings count as one session, so separate sessions on the same day
+  merge unless you use a fresh `--history-dir`).
+
+### Respiration (experimental)
+
+Each card can also show an estimated breathing rate (`resp N br/min · EST`),
+derived from RR-interval variation (respiratory sinus arrhythmia). It is shown
+only when the signal is confident enough, and is **experimental** — RSA fades
+during hard exercise, so treat the number as approximate. See
+[docs/design.md](docs/design.md).
 
 ## Development
 

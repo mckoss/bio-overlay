@@ -1,10 +1,15 @@
 """Tests for the telemetry hub state model and broadcast fan-out."""
 
 import asyncio
+from datetime import datetime, timezone
 
 import pytest
 
 from bio_overlay.telemetry import TelemetryHub
+
+
+def _iso(ms: int) -> str:
+    return datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat(timespec="milliseconds")
 
 
 @pytest.fixture
@@ -54,6 +59,42 @@ async def test_failing_subscriber_is_dropped(hub):
     # Second update should not raise even though the subscriber errored.
     await hub.update_measurement("participant-1", bpm=101)
     assert bad not in hub._subscribers
+
+
+def test_seed_history_restores_session_and_sparkline(hub):
+    import time
+
+    now_ms = int(time.time() * 1000)
+    records = [
+        # Old reading: counts toward session stats but is outside the 5-min spark window.
+        {
+            "t": _iso(now_ms - 10 * 60 * 1000),
+            "participantId": "participant-1",
+            "bpm": 90,
+            "rrIntervalsMs": [666.0],
+        },
+        # Recent reading: in the sparkline window.
+        {
+            "t": _iso(now_ms - 30 * 1000),
+            "participantId": "participant-1",
+            "bpm": 150,
+            "rrIntervalsMs": [400.0],
+        },
+        # Unknown participant is ignored.
+        {"t": _iso(now_ms), "participantId": "ghost", "bpm": 200, "rrIntervalsMs": []},
+        # bpm == 0 is ignored.
+        {"t": _iso(now_ms), "participantId": "participant-1", "bpm": 0, "rrIntervalsMs": []},
+    ]
+    hub.seed_history(records)
+
+    p1 = hub.snapshot()["participants"][0]
+    assert p1["session"]["min"] == 90
+    assert p1["session"]["max"] == 150
+    assert p1["session"]["avg"] == 120  # (90 + 150) / 2
+    assert p1["session"]["count"] == 2
+    # Only the recent reading is in the sparkline window.
+    assert len(p1["samples"]) == 1
+    assert p1["samples"][0][1] == 150
 
 
 async def test_watchdog_marks_stale(hub):

@@ -40,6 +40,18 @@ logger = logging.getLogger(__name__)
 DEFAULT_FLUSH_INTERVAL_S = 5.0
 
 
+def read_records(directory: str | Path, date_str: str) -> list[dict]:
+    """Return the records for one day, or [] if the file is missing/unreadable."""
+    path = Path(directory) / f"{date_str}.json"
+    if not path.exists():
+        return []
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        logger.warning("could not read history %s: %s", path, exc)
+        return []
+
+
 class DailyHistoryWriter:
     def __init__(
         self, directory: str | Path, flush_interval_s: float = DEFAULT_FLUSH_INTERVAL_S
