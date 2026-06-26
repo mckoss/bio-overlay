@@ -48,21 +48,28 @@ shown on each card, labeled EST — see [Respiration](#respiration-experimental)
 
 ## Download
 
-Prebuilt single-file executables for **macOS (Apple Silicon)** and **Windows
-(x64)** are attached to each [GitHub Release](https://github.com/mckoss/bio-overlay/releases).
-Download the one for your OS and run it. With no arguments the executable starts
-collecting and **automatically opens the setup page** in your browser, where you
-can add participants, pair straps, and copy the URL to paste into OBS (it also
-links straight to the overlay). Pass `--no-browser` to skip the auto-open.
+Prebuilt apps for **macOS (Apple Silicon)** and **Windows (x64)** are attached
+to each [GitHub Release](https://github.com/mckoss/bio-overlay/releases). With no
+arguments the app starts collecting and **automatically opens the setup page** in
+your browser, where you can add participants, pair straps, and copy the URL to
+paste into OBS (it also links straight to the overlay). It auto-picks a free
+port, so it works even if a copy is already running.
 
-First-run notes:
-- **macOS:** the binary is unsigned, so Gatekeeper may block it — right-click →
-  **Open** the first time (or `xattr -d com.apple.quarantine ./bio-overlay`).
-  Run it from **Terminal** so the Bluetooth permission prompt can be granted.
-- **Windows:** SmartScreen may warn on an unsigned exe — **More info → Run anyway**.
+- **macOS** — download `bio-overlay-macos-arm64.zip`, unzip it, and double-click
+  `bio-overlay.app`. It's unsigned, so the first time **right-click → Open** to
+  get past Gatekeeper, then **Allow** the Bluetooth prompt. The app is also a
+  normal CLI tool — run the binary inside it from Terminal with arguments:
+  ```bash
+  bio-overlay.app/Contents/MacOS/bio-overlay run --port 9000
+  # optional convenience symlink onto your PATH:
+  ln -sf "$PWD/bio-overlay.app/Contents/MacOS/bio-overlay" /usr/local/bin/bio-overlay
+  ```
+- **Windows** — download and run `bio-overlay-windows-x64.exe`. SmartScreen may
+  warn on an unsigned exe — **More info → Run anyway**. It's also runnable from a
+  terminal with arguments.
 
-When run as a packaged executable, config and history live in
-`~/Documents/Bio-Overlay/` (see [Where files are stored](#where-files-are-stored)).
+When run as a packaged app, config and history live in `~/Documents/Bio-Overlay/`
+(see [Where files are stored](#where-files-are-stored)).
 
 ## Install from source (macOS)
 

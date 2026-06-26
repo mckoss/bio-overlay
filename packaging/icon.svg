@@ -1,0 +1,42 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#222838"/>
+      <stop offset="1" stop-color="#12141c"/>
+    </linearGradient>
+    <linearGradient id="heart" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff5a5c"/>
+      <stop offset="1" stop-color="#e4282b"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#ffffff" flood-opacity="0.85"/>
+    </filter>
+    <filter id="hsoft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="26" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded-square canvas -->
+  <rect x="0" y="0" width="1024" height="1024" rx="230" ry="230" fill="url(#bg)"/>
+
+  <!-- Heart (100-unit path scaled up and centered) -->
+  <g transform="translate(168,150) scale(7)" filter="url(#hsoft)">
+    <path fill="url(#heart)" d="M50,30
+      C50,30 45,18 30,18
+      C8,18 8,42 8,42
+      C8,60 28,74 50,86
+      C72,74 92,60 92,42
+      C92,42 92,18 70,18
+      C55,18 50,30 50,30 Z"/>
+  </g>
+
+  <!-- ECG / heartbeat trace running left to right across the heart -->
+  <polyline
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="26"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    filter="url(#glow)"
+    points="120,520 360,520 410,520 450,470 500,560 545,300 600,700 650,520 690,520 904,520"/>
+</svg>

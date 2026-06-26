@@ -24,7 +24,7 @@ jobs:
         include:
           - os: macos-latest
             label: macos-arm64
-            asset: bio-overlay-macos-arm64
+            asset: bio-overlay-macos-arm64.zip
             binary: bio-overlay
           - os: windows-latest
             label: windows-x64
@@ -47,13 +47,23 @@ jobs:
 
       - name: Smoke test (--version)
         shell: bash
-        run: ./dist/${{ matrix.binary }} --version
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            ./dist/bio-overlay.app/Contents/MacOS/bio-overlay --version
+          else
+            ./dist/${{ matrix.binary }} --version
+          fi
 
-      - name: Rename for release
+      - name: Package for release
         shell: bash
         run: |
           mkdir -p out
-          cp "dist/${{ matrix.binary }}" "out/${{ matrix.asset }}"
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            # Zip the .app so it stays double-clickable and keeps the +x bit.
+            (cd dist && zip -ry "../out/${{ matrix.asset }}" bio-overlay.app)
+          else
+            cp "dist/${{ matrix.binary }}" "out/${{ matrix.asset }}"
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
