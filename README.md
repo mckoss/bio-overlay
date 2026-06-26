@@ -71,9 +71,10 @@ port, so it works even if a copy is already running.
 When run as a packaged app, config and history live in `~/Documents/Bio-Overlay/`
 (see [Where files are stored](#where-files-are-stored)).
 
-**To stop the app** (the `.app` runs with no window): click **Quit bio-overlay**
-at the bottom of the setup page (`/config`). From a terminal you can also press
-**Ctrl-C**.
+**Stopping the app:** the `.app` runs as a background process — it has **no
+window and no Dock icon**. Stop it with the **Quit bio-overlay** button at the
+bottom of the setup page (`/config`). Fallbacks: quit "bio-overlay" from
+**Activity Monitor**, or press **Ctrl-C** if you launched it from a terminal.
 
 ## Install from source (macOS)
 
