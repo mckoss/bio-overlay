@@ -163,7 +163,7 @@
       `<svg viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none">` +
       `<path class="spark-area" d="${area}"/>` +
       `<polyline class="spark-line" points="${pts.join(" ")}"/>` +
-      `<circle class="spark-dot" cx="${x(lastT).toFixed(1)}" cy="${y(lastBpm).toFixed(1)}" r="2.5"/>` +
+      `<circle class="spark-dot" cx="${x(lastT).toFixed(1)}" cy="${y(lastBpm).toFixed(1)}" r="3.5"/>` +
       `</svg>`;
   }
 

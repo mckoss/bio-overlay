@@ -56,8 +56,11 @@ def _browser_host(host: str) -> str:
     return "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
 
 
-def _build_hub(config: AppConfig) -> TelemetryHub:
-    hub = TelemetryHub(stale_after_s=config.stale_after_seconds)
+def _build_hub(config: AppConfig, *, enable_respiration: bool = False) -> TelemetryHub:
+    hub = TelemetryHub(
+        stale_after_s=config.stale_after_seconds,
+        enable_respiration=enable_respiration,
+    )
     for p in config.participants:
         hub.register_participant(p.id, p.display_name, device_id=p.device_id)
     return hub
@@ -71,13 +74,14 @@ async def _serve_with_source(
     config_path: str | None = None,
     open_browser: bool = False,
     port_scan: bool = False,
+    enable_respiration: bool = False,
 ) -> None:
     """Run the server alongside a telemetry source (collector or simulator).
 
     If source_factory is None, only the server runs (e.g. the `config` setup UI).
     If history_dir is given, real readings are persisted to a daily JSON file.
     """
-    hub = _build_hub(config)
+    hub = _build_hub(config, enable_respiration=enable_respiration)
     hub.start_watchdog()
 
     writer = None
@@ -201,6 +205,7 @@ async def _cmd_run(args: argparse.Namespace) -> None:
         config_path=_resolve_config_path(args),
         open_browser=_should_open_browser(args),
         port_scan=_should_port_scan(args),
+        enable_respiration=args.respire_experiment,
     )
 
 
@@ -214,6 +219,7 @@ async def _cmd_simulate(args: argparse.Namespace) -> None:
         config_path=_resolve_config_path(args),
         open_browser=_should_open_browser(args),
         port_scan=_should_port_scan(args),
+        enable_respiration=args.respire_experiment,
     )
 
 
@@ -266,6 +272,12 @@ def build_parser() -> argparse.ArgumentParser:
             "--no-browser",
             action="store_true",
             help="do not auto-open the setup page in a browser",
+        )
+        # Respiration is an experimental RSA-derived estimate, hidden by default.
+        p.add_argument(
+            "--respire-experiment",
+            action="store_true",
+            help="show the experimental respiration (breaths/min) estimate in the overlay",
         )
         p.set_defaults(func=func)
 

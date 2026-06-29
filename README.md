@@ -43,8 +43,9 @@ Working end-to-end and verified against a real Polar H10:
 5. ✅ Simulator for hardware-free development.
 6. ⏳ Two straps at once (single-strap proven; dual-strap reliability still to test).
 
-An experimental estimated breathing rate (from RR-interval variation) is also
-shown on each card, labeled EST — see [Respiration](#respiration-experimental).
+An experimental estimated breathing rate (from RR-interval variation) can also
+be shown on each card, labeled EST — it is **off by default** and enabled with
+`--respire-experiment`; see [Respiration](#respiration-experimental).
 
 ## Download
 
@@ -71,10 +72,13 @@ port, so it works even if a copy is already running.
 When run as a packaged app, config and history live in `~/Documents/Bio-Overlay/`
 (see [Where files are stored](#where-files-are-stored)).
 
-**Stopping the app:** the `.app` runs as a background process — it has **no
-window and no Dock icon**. Stop it with the **Quit bio-overlay** button at the
-bottom of the setup page (`/config`). Fallbacks: quit "bio-overlay" from
-**Activity Monitor**, or press **Ctrl-C** if you launched it from a terminal.
+**Stopping the app:** bio-overlay runs as a background process with **no window**
+(on macOS, no Dock icon either). Stop it with the **Quit bio-overlay** button at
+the bottom of the setup page (`/config`). Fallbacks:
+
+- **macOS** — quit "bio-overlay" from **Activity Monitor**.
+- **Windows** — end the "bio-overlay" process from **Task Manager** (Details tab).
+- **Either** — press **Ctrl-C** if you launched it from a terminal.
 
 ## Install from source (macOS)
 
@@ -188,6 +192,8 @@ Collect from real straps and serve the overlay.
 | `--port-scan` | on unless `--port` given | If the port is busy, pick the next free one. |
 | `--history-dir DIR` | data dir `/history` | Directory for daily history files. |
 | `--no-history` | off | Don't write the daily history file. |
+| `--no-browser` | off | Don't auto-open the setup page on start. |
+| `--respire-experiment` | off | Show the experimental breaths/min estimate on each card. |
 
 By default (no explicit `--port`) bio-overlay auto-picks a free port starting at
 8080, so double-clicking the app "just works" even if another copy is running.
@@ -197,7 +203,8 @@ back to scanning.
 
 ### `bio-overlay simulate`
 Serve the overlay with synthetic data (no hardware, no history file written).
-Accepts `-c/--config`, `--host`, `--port`, `--port-scan`, `--no-browser`.
+Accepts `-c/--config`, `--host`, `--port`, `--port-scan`, `--no-browser`, and
+`--respire-experiment`.
 
 Running with **no arguments** (e.g. double-clicking the executable, or a bare
 `bio-overlay`) is the same as `run`. Both `run` and `simulate` open the setup
@@ -211,9 +218,22 @@ how you run bio-overlay:
 | How you run it | Default config | Default history |
 | --- | --- | --- |
 | From a source checkout | `./config.json` | `./history/` |
-| From a packaged executable | `~/Documents/Bio-Overlay/config.json` | `~/Documents/Bio-Overlay/history/` |
+| From a packaged executable | `<Documents>/Bio-Overlay/config.json` | `<Documents>/Bio-Overlay/history/` |
 
-`-c/--config` and `--history-dir` always override these defaults.
+For the packaged app, `<Documents>/Bio-Overlay/` resolves per OS:
+
+| OS | Folder |
+| --- | --- |
+| **macOS** | `/Users/<you>/Documents/Bio-Overlay/` (i.e. `~/Documents/Bio-Overlay/`) |
+| **Windows** | `C:\Users\<you>\Documents\Bio-Overlay\` |
+
+Inside that folder you'll find `config.json` (your participants and paired
+straps) and `history\` (one `YYYY-MM-DD.jsonl` file per day of real sessions).
+It's safe to back up or delete; deleting `config.json` just resets you to the
+setup page, and deleting a history file only removes that day from `/history`.
+
+`-c/--config` and `--history-dir` always override these defaults. Simulated
+data (`simulate`) never writes a history file.
 
 ## The overlay page
 
@@ -229,17 +249,31 @@ Open `http://<host>:<port>/` (default `http://127.0.0.1:8080/`).
 
 ## OBS setup
 
-1. **Add the overlay.** Sources → **+** → **Browser**.
-   - URL: `http://127.0.0.1:8080/`
-   - Width/Height: `1920` × `1080` (the CSS also works at 1280×720).
+OBS Studio composites the transparent overlay over your camera and exposes the
+result as a "virtual camera" that Zoom can select. Download it (free) from
+[obsproject.com](https://obsproject.com/) — it runs on macOS and Windows.
+
+**One-time scene setup:**
+
+1. **Make sure bio-overlay is running.** Start the app (it opens the setup page);
+   pair your straps, then keep it running. The overlay lives at
+   `http://127.0.0.1:8080/` (your port may differ if 8080 was busy — the setup
+   page shows the exact overlay URL and has a copy button).
+2. **Add the overlay.** In OBS: Sources → **+** → **Browser** → name it
+   "bio-overlay" → **OK**.
+   - **URL:** the overlay URL from the setup page (e.g. `http://127.0.0.1:8080/`).
+   - **Width / Height:** `1920` × `1080` (match your OBS base canvas; the cards
+     are sized for a 1920×1080 canvas).
    - **Uncheck** "Shutdown source when not visible" so the WebSocket stays alive
      across scene switches.
-   - **No Chroma Key needed** — a Browser Source composites real transparency.
-     Adding a green/chroma key would only cause fringing.
-2. **Add your video below it** — a Video Capture Device (webcam) and/or a Display
-   /Window Capture. Order the overlay above your video in the source list and
-   position/scale it where you want the cards.
-3. **Start the Virtual Camera.** Controls → **Start Virtual Camera**.
+   - **No Chroma Key / green screen needed** — a Browser Source composites real
+     transparency. Adding a chroma key would only cause fringing on the cards.
+3. **Add your video below it** — Sources → **+** → **Video Capture Device**
+   (your webcam) and/or a Display/Window Capture. In the Sources list, drag the
+   "bio-overlay" Browser Source **above** your video so the cards sit on top,
+   then position/scale your video to fill the canvas.
+4. **Start the Virtual Camera.** In the **Controls** dock (bottom-right) →
+   **Start Virtual Camera**. Leave OBS running during your session.
 
 To refresh the overlay after editing it, right-click the Browser Source →
 **Refresh** (or its properties → "Refresh cache of current page"). No need to
@@ -248,15 +282,19 @@ restart `bio-overlay` for overlay edits.
 ## Zoom setup
 
 Zoom just consumes the OBS Virtual Camera — no Zoom SDK or plugin is involved.
+Any app with a camera picker (Google Meet, FaceTime, Teams, etc.) works the
+same way.
 
-1. Start `bio-overlay run …` and OBS (with the Virtual Camera started).
-2. In Zoom: **Settings → Video → Camera → OBS Virtual Camera** (or use the
-   in-meeting camera `^` menu next to "Stop Video").
-3. The trainer sees your video with the live heart-rate cards composited in.
+1. Have `bio-overlay` running and OBS running with the **Virtual Camera started**
+   (see above). Do this *before* opening the camera menu in Zoom — Zoom only
+   lists the OBS Virtual Camera once it exists.
+2. In Zoom: **Settings → Video → Camera → OBS Virtual Camera**, or in a meeting
+   use the **`^` arrow next to "Stop Video"** and pick **OBS Virtual Camera**.
+3. The trainer now sees your video with the live heart-rate cards composited in.
 
 Tip: Zoom compresses video, so keep the cards reasonably large and
-high-contrast for readability. Any app with a camera picker (Meet, FaceTime,
-etc.) works the same way.
+high-contrast for readability. The cards are tuned for legibility when the
+1920×1080 stream is downscaled on the viewer's device (e.g. a phone in landscape).
 
 ## Session history
 
@@ -281,10 +319,11 @@ etc.) works the same way.
 ### Respiration (experimental)
 
 Each card can also show an estimated breathing rate (`resp N br/min · EST`),
-derived from RR-interval variation (respiratory sinus arrhythmia). It is shown
-only when the signal is confident enough, and is **experimental** — RSA fades
-during hard exercise, so treat the number as approximate. See
-[docs/design.md](docs/design.md).
+derived from RR-interval variation (respiratory sinus arrhythmia). It is
+**off by default**; start the app with `--respire-experiment` (on `run` or
+`simulate`) to enable it. Even when enabled it appears only when the signal is
+confident enough, and is **experimental** — RSA fades during hard exercise, so
+treat the number as approximate. See [docs/design.md](docs/design.md).
 
 ## Development
 

@@ -11,7 +11,10 @@
   --text: #ffffff;
   --muted: rgba(255, 255, 255, 0.55);
   --radius: 0.6rem;
-  font-size: clamp(14px, 1.4vw, 22px);
+  /* Overlay renders on a fixed 1920x1080 OBS canvas, then the composited stream
+     is downscaled on the remote viewer's device (often a phone in landscape),
+     so size for legibility at that smaller end. */
+  font-size: clamp(16px, 1.6vw, 26px);
 }
 
 * {
@@ -63,8 +66,8 @@ body {
 }
 
 .panel .name {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.55rem;
+  font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text);
 }
@@ -89,7 +92,7 @@ body {
 }
 
 .panel .unit {
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 600;
   color: var(--muted);
 }
@@ -117,7 +120,7 @@ body {
 .spark-line {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 2;
+  stroke-width: 3.5;
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
@@ -136,7 +139,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  font-size: 0.78rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -148,8 +151,8 @@ body {
   display: flex;
   align-items: center;
   gap: 0.9rem;
-  min-height: 1.15rem; /* reserve the row so the card height stays constant */
-  font-size: 0.8rem;
+  min-height: 1.4rem; /* reserve the row so the card height stays constant */
+  font-size: 1rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -159,15 +162,21 @@ body {
   font-weight: 700;
 }
 
-/* Experimental respiration estimate. */
+/* Experimental respiration estimate (shown only with --respire-experiment). */
 .panel .resp {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   min-height: 1.3rem; /* reserve the row so EST appearing/vanishing doesn't resize */
-  font-size: 0.8rem;
+  font-size: 1rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* When respiration is disabled (the default) or below the confidence floor, the
+   row is empty — collapse it entirely so it leaves no gap in the card. */
+.panel .resp:empty {
+  display: none;
 }
 
 .panel .resp b {
@@ -176,7 +185,7 @@ body {
 }
 
 .panel .resp .est {
-  font-size: 0.65rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;

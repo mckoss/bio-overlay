@@ -90,8 +90,13 @@ class ParticipantState:
             self.respiration_brpm = est.breaths_per_min
             self.respiration_confidence = est.confidence
 
-    def to_message(self) -> dict:
-        """Serialize to the camelCase shape consumed by the overlay client."""
+    def to_message(self, include_respiration: bool = True) -> dict:
+        """Serialize to the camelCase shape consumed by the overlay client.
+
+        Respiration is experimental and only included when explicitly enabled
+        (the ``--respire-experiment`` CLI flag); otherwise it is omitted so the
+        overlay never shows the estimate.
+        """
         avg = round(self.session_sum / self.session_count) if self.session_count else None
         return {
             "participantId": self.participant_id,
@@ -112,12 +117,13 @@ class ParticipantState:
                 "count": self.session_count,
             },
             # Experimental: estimated breaths/min with a 0..1 confidence, or null.
+            # Only present when respiration is enabled (off by default).
             "respiration": (
                 {
                     "breathsPerMin": self.respiration_brpm,
                     "confidence": self.respiration_confidence,
                 }
-                if self.respiration_brpm is not None
+                if include_respiration and self.respiration_brpm is not None
                 else None
             ),
         }
@@ -136,12 +142,15 @@ class TelemetryHub:
         stale_after_s: float = DEFAULT_STALE_AFTER_S,
         history_window_s: float = DEFAULT_HISTORY_WINDOW_S,
         resp_window_s: float = DEFAULT_RESP_WINDOW_S,
+        enable_respiration: bool = False,
     ) -> None:
         self._participants: dict[str, ParticipantState] = {}
         self._subscribers: set[Subscriber] = set()
         self._stale_after_s = stale_after_s
         self._history_window_ms = int(history_window_s * 1000)
         self._resp_window_ms = int(resp_window_s * 1000)
+        # Experimental respiration estimate is hidden unless enabled.
+        self._enable_respiration = enable_respiration
         self._watchdog_task: asyncio.Task | None = None
         self._recorder: Recorder | None = None
 
@@ -242,7 +251,10 @@ class TelemetryHub:
         """Full state for all participants, in registration order."""
         return {
             "type": "state",
-            "participants": [p.to_message() for p in self._participants.values()],
+            "participants": [
+                p.to_message(include_respiration=self._enable_respiration)
+                for p in self._participants.values()
+            ],
         }
 
     # -- updates ----------------------------------------------------------
