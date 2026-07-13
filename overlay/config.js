@@ -96,6 +96,9 @@
       config = data.config;
       if (!config.participants) config.participants = [];
       pathEl.textContent = data.path;
+      if (data.version) {
+        document.getElementById("version").textContent = "v" + data.version;
+      }
       renderAll();
     } catch (err) {
       setStatus("Could not load config: " + err, "err");

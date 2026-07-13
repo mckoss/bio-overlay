@@ -35,6 +35,12 @@ header h1 {
   font-size: 1.6rem;
 }
 
+.version {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: normal;
+}
+
 .path {
   margin: 0 0 1.5rem;
   color: var(--muted);

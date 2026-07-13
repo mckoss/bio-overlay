@@ -25,6 +25,7 @@ from pathlib import Path
 
 from aiohttp import WSCloseCode, WSMsgType, web
 
+from . import __version__
 from .config import AppConfig
 from .telemetry import TelemetryHub
 
@@ -145,7 +146,9 @@ async def _get_config(request: web.Request) -> web.Response:
         config = AppConfig.load(path)
     else:
         config = request.app["config"] or AppConfig.default()
-    return web.json_response({"path": str(path), "config": config.to_dict()})
+    return web.json_response(
+        {"path": str(path), "config": config.to_dict(), "version": __version__}
+    )
 
 
 async def _put_config(request: web.Request) -> web.Response:
