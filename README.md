@@ -92,6 +92,11 @@ python -m pip install -e ".[dev]"
 
 ## Quick start
 
+These commands assume the virtualenv from the install step is activated
+(`source .venv/bin/activate`); alternatively, skip activation and run
+`.venv/bin/bio-overlay` directly. **Run from the repo root** — config and
+history default to the current directory (`./config.json`, `./history/`).
+
 No hardware (simulated data) — good for building the overlay and OBS scene:
 
 ```bash
@@ -103,7 +108,7 @@ With real straps:
 ```bash
 cp config.example.json config.json
 bio-overlay scan                # discover straps; copy each deviceId into config.json
-bio-overlay run -c config.json  # then open http://127.0.0.1:8080/
+bio-overlay run                 # then open http://127.0.0.1:8080/
 ```
 
 > **macOS Bluetooth permission:** the first BLE access pops a system permission
@@ -126,8 +131,14 @@ overlay URL for OBS — then **Save**.
 ### `config.json` (manual)
 
 Copy `config.example.json` to `config.json` (which is git-ignored, since it can
-contain personal device IDs) and edit it. Without `-c`, sensible defaults are
-used (two unbound participants, `127.0.0.1:8080`).
+contain personal device IDs) and edit it.
+
+Where the app looks for it: `-c PATH` if given; otherwise `./config.json` in
+the **current directory** when running from source, or
+`~/Documents/Bio-Overlay/config.json` when running the packaged app. If no
+file is found, built-in defaults are used (two unbound participants,
+`127.0.0.1:8080`). The setup page header shows exactly which file is being
+edited.
 
 ```json
 {
