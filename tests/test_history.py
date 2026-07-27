@@ -136,6 +136,38 @@ async def test_reset_session_header_and_seeding(tmp_path):
     assert len(sessions) == 2
 
 
+async def test_idle_closes_write_no_empty_sessions(tmp_path):
+    """Headers are lazy, so an app idling in the background — with the hub
+    auto-closing and reset_session() firing with no data in between — must
+    write nothing at all, and repeated closes must not stack headers."""
+    w = DailyHistoryWriter(tmp_path)
+    w.start_session(_participants("mike-koss"))
+    for _ in range(5):  # repeated auto-closes with no data between them
+        w.reset_session()
+    await w.close()
+    assert list(tmp_path.glob("*.jsonl")) == []  # zero bytes written
+
+    # With data on both sides, exactly one reset boundary appears — never a
+    # stream of empty sessions.
+    w2 = DailyHistoryWriter(tmp_path)
+    w2.start_session(_participants("mike-koss"))
+    w2.record(_state(), 78, [], _at(second=0, ms=0))
+    for _ in range(3):
+        w2.reset_session()
+    w2.record(_state(), 90, [], _at(second=30, ms=0))
+    await w2.close()
+
+    recs = _lines(tmp_path / "2026-06-26.jsonl")
+    headers = [r for r in recs if "session" in r]
+    assert len(headers) == 2  # the initial header + one reset-marked header
+    assert headers[1]["reset"] is True
+
+    from bio_overlay.history import list_sessions
+
+    # And the history page lists only sessions that contain data.
+    assert len(list_sessions(tmp_path)) == 2
+
+
 # -- session listing / detail -------------------------------------------------
 
 
