@@ -23,6 +23,8 @@ def hub():
 def test_snapshot_has_both_participants(hub):
     snap = hub.snapshot()
     assert snap["type"] == "state"
+    # The session clock starts when the hub is created.
+    assert datetime.fromisoformat(snap["sessionStartedAt"]) <= datetime.now().astimezone()
     ids = [p["participantId"] for p in snap["participants"]]
     assert ids == ["participant-1", "participant-2"]
     # Initial state is disconnected with no bpm.
@@ -101,7 +103,12 @@ def test_seed_history_restores_session_and_sparkline(hub):
     ]
     hub.seed_history(records)
 
-    p1 = hub.snapshot()["participants"][0]
+    snap = hub.snapshot()
+    # The restored session's clock starts at the first seeded reading.
+    started = datetime.fromisoformat(snap["sessionStartedAt"])
+    assert abs(started.timestamp() * 1000 - (now_ms - 10 * 60 * 1000)) < 1000
+
+    p1 = snap["participants"][0]
     assert p1["session"]["min"] == 90
     assert p1["session"]["max"] == 150
     assert p1["session"]["avg"] == 120  # (90 + 150) / 2
@@ -121,9 +128,12 @@ async def test_reset_session_clears_history_keeps_connection(hub):
         received.append(msg)
 
     hub.subscribe(sub)
+    started_before = hub._session_started_at
     await hub.reset_session()
 
     assert received, "reset should broadcast the cleared state"
+    # The session clock restarts on reset.
+    assert hub._session_started_at > started_before
     p1 = received[-1]["participants"][0]
     # History is gone...
     assert p1["session"] == {"min": None, "max": None, "avg": None, "count": 0}

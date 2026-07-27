@@ -258,6 +258,53 @@ select:focus {
   flex: 1;
 }
 
+/* Live overlay preview: the real overlay page in an iframe, scaled to fit.
+   The whole thing is a link to the full-size page (the iframe itself ignores
+   pointer events so clicks land on the anchor). */
+.overlay-preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid #333a4d;
+  /* The overlay is transparent; stand in for the video it will sit over. */
+  background: linear-gradient(160deg, #2c3345, #161a24);
+  margin-bottom: 1rem;
+}
+
+.overlay-preview:hover {
+  border-color: var(--accent-2);
+}
+
+.overlay-preview iframe {
+  width: 1920px;
+  height: 1080px;
+  border: 0;
+  transform-origin: 0 0; /* scale set from JS: preview width / 1920 */
+  pointer-events: none;
+}
+
+.session-clock {
+  position: absolute;
+  left: 50%;
+  bottom: 0.6rem;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 0.25rem 0.7rem;
+  border-radius: 1rem;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-clock:empty {
+  display: none;
+}
+
 .obs-url {
   display: flex;
   align-items: center;

@@ -146,6 +146,9 @@ class TelemetryHub:
     ) -> None:
         self._participants: dict[str, ParticipantState] = {}
         self._subscribers: set[Subscriber] = set()
+        # When the current session began: process start, the first seeded
+        # reading after a restart, or the last user-initiated reset.
+        self._session_started_at = _now()
         self._stale_after_s = stale_after_s
         self._history_window_ms = int(history_window_s * 1000)
         self._resp_window_ms = int(resp_window_s * 1000)
@@ -206,6 +209,7 @@ class TelemetryHub:
         now_ms = int(_now().timestamp() * 1000)
         spark_cutoff = now_ms - self._history_window_ms
         rr_cutoff = now_ms - self._resp_window_ms
+        session_start: datetime | None = None
         for rec in records:
             # Compact JSONL keys ("p"/"rr"); tolerate the older verbose keys too.
             pid = rec.get("p") or rec.get("participantId")
@@ -215,9 +219,15 @@ class TelemetryHub:
             if state is None or not bpm or bpm <= 0 or not ts:
                 continue
             try:
-                at_ms = int(datetime.fromisoformat(ts).timestamp() * 1000)
+                at = datetime.fromisoformat(ts)
             except ValueError:
                 continue
+            at_ms = int(at.timestamp() * 1000)
+            # Records are chronological: the first restored reading marks when
+            # the (still in-progress) session started.
+            if session_start is None:
+                session_start = at
+                self._session_started_at = at
             # Today had data for this participant, so show it on restart.
             state.active = True
             # Whole-session aggregates use every reading from the file.
@@ -251,6 +261,7 @@ class TelemetryHub:
         """Full state for all participants, in registration order."""
         return {
             "type": "state",
+            "sessionStartedAt": self._session_started_at.isoformat(timespec="seconds"),
             "participants": [
                 p.to_message(include_respiration=self._enable_respiration)
                 for p in self._participants.values()
@@ -297,6 +308,7 @@ class TelemetryHub:
         Connection state and the latest reading are kept — the straps are still
         on the participants; only the accumulated history is cleared.
         """
+        self._session_started_at = _now()
         for state in self._participants.values():
             state.samples.clear()
             state.session_min = None

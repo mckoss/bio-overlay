@@ -30,14 +30,40 @@
 
       <section>
         <div class="section-head">
-          <h2>Session</h2>
+          <h2>Session &amp; overlay</h2>
           <button id="new-session" class="btn btn-primary">▶ Start new session</button>
         </div>
         <p class="hint">
-          Clears the on-screen stats and sparklines for a fresh start, then opens
-          the overlay page so you can check everyone's readings. (Past sessions
-          stay in <a href="/history">history</a>.)
+          Live preview of the overlay — click it to open the full-size page.
+          Starting a new session clears the stats and sparklines for a fresh
+          start (past sessions stay in <a href="/history">history</a>).
         </p>
+        <a
+          id="overlay-preview"
+          class="overlay-preview"
+          href="/"
+          target="_blank"
+          rel="noopener"
+          title="Open the full-size overlay page"
+        >
+          <iframe
+            id="overlay-frame"
+            src="/"
+            tabindex="-1"
+            scrolling="no"
+            title="Live overlay preview"
+          ></iframe>
+          <span id="session-clock" class="session-clock"></span>
+        </a>
+        <p class="hint">
+          In OBS, add a <strong>Browser</strong> source sized
+          <strong>1920 × 1080</strong> and paste this URL (no chroma key needed —
+          the page is transparent):
+        </p>
+        <div class="obs-url">
+          <code id="overlay-url">http://127.0.0.1:8080/</code>
+          <button id="copy-url" class="btn">Copy</button>
+        </div>
       </section>
 
       <section>
@@ -50,24 +76,6 @@
           advertises, then scan and assign it to a participant.
         </p>
         <div id="scan-results" class="scan-results"></div>
-      </section>
-
-      <section>
-        <div class="section-head">
-          <h2>Overlay &amp; OBS</h2>
-          <a id="open-overlay" class="btn" href="/" target="_blank" rel="noopener">
-            Open overlay ↗
-          </a>
-        </div>
-        <p class="hint">
-          In OBS, add a <strong>Browser</strong> source sized
-          <strong>1920 × 1080</strong> and paste this URL (no chroma key needed —
-          the page is transparent):
-        </p>
-        <div class="obs-url">
-          <code id="overlay-url">http://127.0.0.1:8080/</code>
-          <button id="copy-url" class="btn">Copy</button>
-        </div>
       </section>
 
       <footer>
