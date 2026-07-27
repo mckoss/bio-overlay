@@ -34,11 +34,7 @@
     participantsEl.innerHTML = "";
     config.participants.forEach((p, i) => {
       const row = el("div", "participant");
-      const badge = el("span", "live");
-      badge.dataset.pid = p.id;
-      badge.append(el("span", "heart", "♥"), el("span", "bpm", "—"));
       row.append(
-        badge,
         field("Display name", p.displayName, (v) => (p.displayName = v)),
         field("ID (key)", p.id, (v) => (p.id = v)),
         field("Device ID", p.deviceId, (v) => (p.deviceId = v || null))
@@ -52,15 +48,14 @@
       row.append(remove);
       participantsEl.appendChild(row);
     });
-    updateLiveBadges();
   }
 
-  // -- live band status ---------------------------------------------------
-  // The setup page listens on the same telemetry WebSocket as the overlay so
-  // each participant row can show whether their strap is actively reading.
+  // -- live session state --------------------------------------------------
+  // The setup page listens on the telemetry WebSocket so Start-new-session
+  // knows whether the current session already has data worth confirming over.
+  // (Live per-strap status is visible in the overlay preview itself.)
 
   const live = new Map(); // participantId -> latest participant message
-  let sessionStartedAt = null; // Date, from the server's snapshot
 
   function connectLive() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -75,12 +70,6 @@
       if (msg.type !== "state" || !Array.isArray(msg.participants)) return;
       live.clear();
       for (const p of msg.participants) live.set(p.participantId, p);
-      if (msg.sessionStartedAt) {
-        const d = new Date(msg.sessionStartedAt);
-        sessionStartedAt = isNaN(d) ? null : d;
-      }
-      updateLiveBadges();
-      updateSessionClock();
     });
     // The server may restart (or the page may outlive it); keep retrying.
     ws.addEventListener("close", () => setTimeout(connectLive, 2000));
@@ -92,38 +81,11 @@
 
   const previewEl = document.getElementById("overlay-preview");
   const frameEl = document.getElementById("overlay-frame");
-  const clockEl = document.getElementById("session-clock");
 
   function sizePreview() {
     // The overlay targets a 1920x1080 canvas; render it full-size in the
     // iframe and scale it down to the preview's width.
     frameEl.style.transform = `scale(${previewEl.clientWidth / 1920})`;
-  }
-
-  function updateSessionClock() {
-    if (!sessionStartedAt) {
-      clockEl.textContent = "";
-      return;
-    }
-    const hhmm = sessionStartedAt.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const mins = Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000));
-    clockEl.textContent =
-      `Start: ${hhmm} · Duration: ${mins} ${mins === 1 ? "minute" : "minutes"}`;
-  }
-
-  function updateLiveBadges() {
-    for (const badge of participantsEl.querySelectorAll(".live")) {
-      const p = live.get(badge.dataset.pid);
-      const reading = !!(p && p.connected && !p.stale && p.bpm > 0);
-      badge.classList.toggle("reading", reading);
-      badge.querySelector(".bpm").textContent = reading ? String(p.bpm) : "—";
-      badge.title = reading
-        ? `${p.displayName}'s strap is sending readings`
-        : "No readings from this strap yet";
-    }
   }
 
   function hasSessionData() {
@@ -299,7 +261,6 @@
 
   window.addEventListener("resize", sizePreview);
   sizePreview();
-  setInterval(updateSessionClock, 30000); // keep the duration fresh
 
   setupOverlayLinks();
   connectLive();

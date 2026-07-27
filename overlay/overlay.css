@@ -244,6 +244,26 @@ body {
   color: #ffb020;
 }
 
+/* Session clock: start time + running duration, bottom center of the frame. */
+.session-clock {
+  position: absolute;
+  bottom: 2.5vh;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 0.3rem 0.9rem;
+  border-radius: 1.2rem;
+  background: var(--panel-bg);
+  backdrop-filter: blur(2px);
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-clock:empty {
+  display: none;
+}
+
 /* Tiny WS connection dot, hidden by default in normal operation. */
 .conn-status {
   position: absolute;
