@@ -87,6 +87,32 @@ def test_read_records_missing_returns_empty(tmp_path):
     assert read_records(tmp_path, "2026-01-01") == []
 
 
+async def test_reset_session_header_and_seeding(tmp_path):
+    w = DailyHistoryWriter(tmp_path)
+    w.start_session(_participants("mike-koss"))
+    w.record(_state(), 78, [776.4], _at(second=0, ms=0))
+    # User clicks "Start new session": next header carries the reset marker.
+    w.reset_session()
+    w.record(_state(), 100, [500.0], _at(second=30, ms=0))
+    await w.close()
+
+    recs = _lines(tmp_path / "2026-06-26.jsonl")
+    headers = [r for r in recs if "session" in r]
+    assert len(headers) == 2
+    assert "reset" not in headers[0]
+    assert headers[1]["reset"] is True
+
+    # Seeding after a restart only restores data since the reset.
+    seeded = read_records(tmp_path, "2026-06-26")
+    assert [r["bpm"] for r in seeded] == [100]
+
+    # The history page still lists both sessions.
+    from bio_overlay.history import list_sessions
+
+    sessions = list_sessions(tmp_path)
+    assert len(sessions) == 2
+
+
 # -- session listing / detail -------------------------------------------------
 
 

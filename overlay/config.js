@@ -34,7 +34,11 @@
     participantsEl.innerHTML = "";
     config.participants.forEach((p, i) => {
       const row = el("div", "participant");
+      const badge = el("span", "live");
+      badge.dataset.pid = p.id;
+      badge.append(el("span", "heart", "♥"), el("span", "bpm", "—"));
       row.append(
+        badge,
         field("Display name", p.displayName, (v) => (p.displayName = v)),
         field("ID (key)", p.id, (v) => (p.id = v)),
         field("Device ID", p.deviceId, (v) => (p.deviceId = v || null))
@@ -48,6 +52,51 @@
       row.append(remove);
       participantsEl.appendChild(row);
     });
+    updateLiveBadges();
+  }
+
+  // -- live band status ---------------------------------------------------
+  // The setup page listens on the same telemetry WebSocket as the overlay so
+  // each participant row can show whether their strap is actively reading.
+
+  const live = new Map(); // participantId -> latest participant message
+
+  function connectLive() {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    ws.addEventListener("message", (ev) => {
+      let msg;
+      try {
+        msg = JSON.parse(ev.data);
+      } catch {
+        return;
+      }
+      if (msg.type !== "state" || !Array.isArray(msg.participants)) return;
+      live.clear();
+      for (const p of msg.participants) live.set(p.participantId, p);
+      updateLiveBadges();
+    });
+    // The server may restart (or the page may outlive it); keep retrying.
+    ws.addEventListener("close", () => setTimeout(connectLive, 2000));
+  }
+
+  function updateLiveBadges() {
+    for (const badge of participantsEl.querySelectorAll(".live")) {
+      const p = live.get(badge.dataset.pid);
+      const reading = !!(p && p.connected && !p.stale && p.bpm > 0);
+      badge.classList.toggle("reading", reading);
+      badge.querySelector(".bpm").textContent = reading ? String(p.bpm) : "—";
+      badge.title = reading
+        ? `${p.displayName}'s strap is sending readings`
+        : "No readings from this strap yet";
+    }
+  }
+
+  function hasSessionData() {
+    for (const p of live.values()) {
+      if (p.session && p.session.count > 0) return true;
+    }
+    return false;
   }
 
   function renderScan(devices) {
@@ -174,6 +223,28 @@
     });
   }
 
+  async function newSession() {
+    if (
+      hasSessionData() &&
+      !confirm(
+        "Start a new session? On-screen stats and sparklines reset for everyone. " +
+          "(The finished session is kept in history.)"
+      )
+    ) {
+      return;
+    }
+    // Open the overlay tab synchronously so popup blockers allow it; the reset
+    // reaches it over the WebSocket a moment later.
+    window.open(location.origin + "/", "bio-overlay-overlay");
+    try {
+      const res = await fetch("/api/new-session", { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      setStatus("New session started — overlay opened in a new tab.", "ok");
+    } catch (err) {
+      setStatus("Could not start a new session: " + err.message, "err");
+    }
+  }
+
   async function quit() {
     if (!confirm("Quit bio-overlay? The overlay will go offline until you start the app again.")) {
       return;
@@ -191,8 +262,10 @@
   document.getElementById("add").addEventListener("click", addParticipant);
   document.getElementById("scan").addEventListener("click", (e) => scan(e.currentTarget));
   document.getElementById("save").addEventListener("click", save);
+  document.getElementById("new-session").addEventListener("click", newSession);
   document.getElementById("quit").addEventListener("click", quit);
 
   setupOverlayLinks();
+  connectLive();
   load();
 })();

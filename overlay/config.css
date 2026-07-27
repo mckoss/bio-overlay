@@ -91,13 +91,55 @@ h2 {
 /* Participant rows */
 .participant {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: 4.2rem 1fr 1fr 1fr auto;
   gap: 0.6rem;
   align-items: end;
   padding: 0.7rem;
   background: var(--panel-2);
   border-radius: var(--radius);
   margin-bottom: 0.6rem;
+}
+
+/* Live band status: pulsing heart + BPM while the strap is sending readings. */
+.participant .live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  align-self: end;
+  padding-bottom: 0.5rem;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.participant .live .heart {
+  display: inline-block; /* transforms don't apply to inline elements */
+  opacity: 0.35;
+}
+
+.participant .live.reading {
+  color: var(--text);
+}
+
+.participant .live.reading .heart {
+  color: var(--accent);
+  opacity: 1;
+  animation: heartbeat 1s ease-in-out infinite;
+}
+
+.live-example {
+  color: var(--accent);
+}
+
+@keyframes heartbeat {
+  0%,
+  30%,
+  100% {
+    transform: scale(1);
+  }
+  15% {
+    transform: scale(1.35);
+  }
 }
 
 .field {

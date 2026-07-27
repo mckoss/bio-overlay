@@ -117,6 +117,13 @@ async def _serve_with_source(
             writer.start_session(new_config.participants)
         logging.info("applied config change (%d participants)", len(new_config.participants))
 
+    async def start_new_session() -> None:
+        """Reset live session state; mark the history so a restart won't restore it."""
+        await hub.reset_session()
+        if writer is not None:
+            writer.reset_session()
+        logging.info("started a new session (stats and sparklines cleared)")
+
     # The history page reads past sessions even when not writing (simulate /
     # --no-history), so resolve a directory to read from regardless.
     history_read_dir = history_dir or str(default_history_dir())
@@ -135,6 +142,7 @@ async def _serve_with_source(
         port_scan=port_scan,
         history_dir=history_read_dir,
         request_shutdown=lambda: loop.call_soon_threadsafe(stop.set),
+        start_new_session=start_new_session,
     )
 
     if open_browser:

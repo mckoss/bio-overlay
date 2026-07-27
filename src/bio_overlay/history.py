@@ -11,7 +11,10 @@ line carries a time offset in whole seconds (``s``) and the participant's index
     {"s": 5, "p": 0, "bpm": 80, "rr": [751.0, 769.2, 742.1, 760.5, 733.8]}
 
 A new session header is written at startup, on a live config change, and at
-midnight rollover, so each file is self-describing. ``read_records`` resolves the
+midnight rollover, so each file is self-describing. A user-initiated "start new
+session" additionally marks its header with ``"reset": true``; ``read_records``
+(used to re-seed live state after a restart) drops everything before the last
+reset so the pre-reset session doesn't come back. It otherwise resolves the
 header + offsets back into absolute records.
 
 Readings arrive ~1/s, but the writer keeps at most one data line per participant
@@ -64,6 +67,8 @@ def read_records(directory: str | Path, date_str: str) -> list[dict]:
                 except (ValueError, TypeError):
                     session_start = None
                 ids = [p.get("id") for p in rec.get("participants", [])]
+                if rec.get("reset"):
+                    out.clear()  # user started a new session; forget what came before
                 continue
             if session_start is None or "s" not in rec or "p" not in rec:
                 continue
@@ -220,6 +225,7 @@ class DailyHistoryWriter:
         self._index: dict[str, int] = {}
         self._session_start: datetime | None = None
         self._need_header = False
+        self._reset = False
 
     # -- public API -------------------------------------------------------
 
@@ -234,6 +240,14 @@ class DailyHistoryWriter:
         self._index = {p.id: i for i, p in enumerate(participants)}
         self._need_header = True
         self._session_start = None
+
+    def reset_session(self) -> None:
+        """User-initiated new session: re-emit the header (same participants)
+        with a reset marker so a later restart won't re-seed pre-reset data."""
+        self._need_header = True
+        self._session_start = None
+        self._reset = True
+        self._pending.clear()  # don't carry buffered RR into the new session
 
     def record(
         self,
@@ -292,7 +306,11 @@ class DailyHistoryWriter:
     def _write_header(self, at: datetime) -> None:
         self._session_start = at
         self._need_header = False
-        self._emit({"session": at.isoformat(timespec="milliseconds"), "participants": self._meta})
+        header = {"session": at.isoformat(timespec="milliseconds"), "participants": self._meta}
+        if self._reset:
+            header["reset"] = True
+            self._reset = False
+        self._emit(header)
 
     def _write_line(self, participant_id: str, pend: _Pending) -> None:
         idx = self._index.get(participant_id)

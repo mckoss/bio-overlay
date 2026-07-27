@@ -291,6 +291,23 @@ class TelemetryHub:
                 self._recorder(state, bpm, state.rr_intervals_ms, now)
         await self._broadcast()
 
+    async def reset_session(self) -> None:
+        """Start a fresh session: drop sparklines and session aggregates.
+
+        Connection state and the latest reading are kept — the straps are still
+        on the participants; only the accumulated history is cleared.
+        """
+        for state in self._participants.values():
+            state.samples.clear()
+            state.session_min = None
+            state.session_max = None
+            state.session_sum = 0
+            state.session_count = 0
+            state.rr_window.clear()
+            state.respiration_brpm = None
+            state.respiration_confidence = None
+        await self._broadcast()
+
     async def set_connected(self, participant_id: str, connected: bool) -> None:
         state = self._participants.get(participant_id)
         if state is None:
