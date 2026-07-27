@@ -196,7 +196,7 @@ body {
 
 .panel .spark-svg {
   width: 12rem;
-  height: 3rem;
+  height: 4.5rem;
 }
 
 .panel .spark-svg svg {
@@ -224,15 +224,23 @@ body {
   fill: var(--accent);
 }
 
+/* Axis labels, pinned to their gridlines: with zones, the max HR (100% line)
+   and the rest threshold (50% line); otherwise the window min/max. */
 .panel .spark-bounds {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  font-size: 0.95rem;
+  position: relative;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  min-width: 2ch;
+  min-width: 3ch;
+}
+
+.panel .spark-max,
+.panel .spark-min {
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+  line-height: 1;
 }
 
 /* Whole-session summary. */

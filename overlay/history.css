@@ -214,19 +214,13 @@ h2 {
   vector-effect: non-scaling-stroke;
 }
 
+/* Axis labels; JS pins each to its gridline via an inline top. */
 .p-spark .y-max,
 .p-spark .y-min {
   position: absolute;
   right: 0;
+  transform: translateY(-50%);
   font-size: 0.72rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-
-.p-spark .y-max {
-  top: 0;
-}
-
-.p-spark .y-min {
-  bottom: 0;
 }

@@ -147,18 +147,21 @@
       if (bpm < dataLo) dataLo = bpm;
       if (bpm > dataHi) dataHi = bpm;
     }
-    // Anchor the y-scale to the participant's HR range so the bands are
-    // stable gridlines; fall back to the data range without zones.
+    // With zones, fix the y-scale to the participant's HR range (45..105% of
+    // HRmax) so the bands fill the chart; out-of-range readings clamp to the
+    // edges. Without zones, auto-scale to the data as before.
+    const banded = zones && Array.isArray(zones.divisors);
     let lo = dataLo, hi = dataHi;
-    if (zones && Array.isArray(zones.divisors)) {
-      lo = Math.min(dataLo, Math.round(zones.maxHr * 0.45));
-      hi = Math.max(dataHi, Math.round(zones.maxHr * 1.05));
+    if (banded) {
+      lo = Math.round(zones.maxHr * 0.45);
+      hi = Math.round(zones.maxHr * 1.05);
     }
     const span = hi - lo || 1;
     const sSpan = sN - s0 || 1;
     const innerH = SPARK_H - 2 * SPARK_PAD;
     const x = (s) => ((s - s0) / sSpan) * SPARK_W;
-    const y = (bpm) => SPARK_PAD + (1 - (bpm - lo) / span) * innerH;
+    const y = (bpm) =>
+      SPARK_PAD + (1 - (Math.min(hi, Math.max(lo, bpm)) - lo) / span) * innerH;
     const pts = points.map(([s, bpm]) => `${x(s).toFixed(1)},${y(bpm).toFixed(1)}`);
     const bands = zoneBandsSvg(zones, lo, hi, y);
     // With zone bands, the area fill just muddies the band colors — skip it.
@@ -168,13 +171,22 @@
         pts.map((p) => `L ${p}`).join(" ") +
         ` L ${x(sN).toFixed(1)},${SPARK_H} Z"/>`;
 
+    // Axis labels pinned to their gridlines: with zones, max HR and the rest
+    // threshold; otherwise the data min/max.
+    const pct = (v) => ((v / SPARK_H) * 100).toFixed(1) + "%";
+    const labels = banded
+      ? `<span class="y-max" style="top:${pct(y(zones.maxHr))}">${zones.maxHr}</span>` +
+        `<span class="y-min" style="top:${pct(y(zones.divisors[0]))}">${zones.divisors[0]}</span>`
+      : `<span class="y-max" style="top:${pct(y(dataHi))}">${dataHi}</span>` +
+        `<span class="y-min" style="top:${pct(y(dataLo))}">${dataLo}</span>`;
+
     wrap.innerHTML =
       `<svg viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none">` +
       bands +
       area +
       `<polyline class="spark-line" points="${pts.join(" ")}"/>` +
       `</svg>` +
-      `<span class="y-max">${dataHi}</span><span class="y-min">${dataLo}</span>`;
+      labels;
     return wrap;
   }
 
