@@ -147,15 +147,20 @@
       `<span class="est">est</span>`;
   }
 
-  // With zones, the y-axis anchors to the participant's heart-rate range
-  // (~45%..105% of HRmax) so the intensity bands are stable, meaningful
-  // gridlines; without zones it auto-scales to the window as before.
+  // With zones, the y-axis is FIXED to the participant's heart-rate range
+  // (45%..105% of HRmax) so the intensity bands are stable, full-height
+  // gridlines; readings outside the range clamp to the chart edges rather
+  // than stretching (and compressing) the scale. Without zones it
+  // auto-scales to the window as before.
   function sparklineScale(dataLo, dataHi, zones) {
     if (!zones || !Array.isArray(zones.divisors)) return [dataLo, dataHi];
-    return [
-      Math.min(dataLo, Math.round(zones.maxHr * 0.45)),
-      Math.max(dataHi, Math.round(zones.maxHr * 1.05)),
-    ];
+    return [Math.round(zones.maxHr * 0.45), Math.round(zones.maxHr * 1.05)];
+  }
+
+  // Place an axis label at its position on the chart (percent of height).
+  function setBound(el, value, yPos) {
+    el.textContent = String(value);
+    el.style.top = `${((yPos / SPARK_H) * 100).toFixed(1)}%`;
   }
 
   // Translucent band rects + hairlines at the divisors, behind the line.
@@ -187,7 +192,9 @@
     if (!s.length) {
       panel.sparkEl.innerHTML = "";
       panel.maxEl.textContent = "--";
+      panel.maxEl.style.top = "0%";
       panel.minEl.textContent = "--";
+      panel.minEl.style.top = "100%";
       return;
     }
 
@@ -197,15 +204,23 @@
       if (bpm < dataLo) dataLo = bpm;
       if (bpm > dataHi) dataHi = bpm;
     }
-    // The bounds column still reports the window's own min/max.
-    panel.maxEl.textContent = String(dataHi);
-    panel.minEl.textContent = String(dataLo);
 
     const [lo, hi] = sparklineScale(dataLo, dataHi, zones);
     const span = hi - lo || 1; // avoid divide-by-zero on a flat line
     const innerH = SPARK_H - 2 * SPARK_PAD_Y;
     const x = (t) => ((t - cutoff) / WINDOW_MS) * SPARK_W;
-    const y = (bpm) => SPARK_PAD_Y + (1 - (bpm - lo) / span) * innerH;
+    const y = (bpm) =>
+      SPARK_PAD_Y + (1 - (Math.min(hi, Math.max(lo, bpm)) - lo) / span) * innerH;
+
+    // Axis labels: with zones, the max HR and the rest threshold, each pinned
+    // to its gridline; otherwise the window's own min/max at the extremes.
+    if (zones && Array.isArray(zones.divisors)) {
+      setBound(panel.maxEl, zones.maxHr, y(zones.maxHr));
+      setBound(panel.minEl, zones.divisors[0], y(zones.divisors[0]));
+    } else {
+      setBound(panel.maxEl, dataHi, y(dataHi));
+      setBound(panel.minEl, dataLo, y(dataLo));
+    }
 
     const pts = s.map(([t, bpm]) => `${x(t).toFixed(1)},${y(bpm).toFixed(1)}`);
     const [lastT, lastBpm] = s[s.length - 1];
