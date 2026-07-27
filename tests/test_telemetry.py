@@ -23,8 +23,8 @@ def hub():
 def test_snapshot_has_both_participants(hub):
     snap = hub.snapshot()
     assert snap["type"] == "state"
-    # The session clock starts when the hub is created.
-    assert datetime.fromisoformat(snap["sessionStartedAt"]) <= datetime.now().astimezone()
+    # No session is open until the first reading arrives.
+    assert snap["sessionStartedAt"] is None
     ids = [p["participantId"] for p in snap["participants"]]
     assert ids == ["participant-1", "participant-2"]
     # Initial state is disconnected with no bpm.
@@ -137,12 +137,12 @@ async def test_reset_session_clears_history_keeps_connection(hub):
         received.append(msg)
 
     hub.subscribe(sub)
-    started_before = hub._session_started_at
+    assert hub._session_started_at is not None
     await hub.reset_session()
 
     assert received, "reset should broadcast the cleared state"
-    # The session clock restarts on reset.
-    assert hub._session_started_at > started_before
+    # The session clock stops on reset; the next reading restarts it.
+    assert hub._session_started_at is None
     p1 = received[-1]["participants"][0]
     # History is gone...
     assert p1["session"] == {"min": None, "max": None, "avg": None, "count": 0}
@@ -158,9 +158,41 @@ async def test_reset_session_then_new_readings_accumulate(hub):
     await hub.reset_session()
     await hub.update_measurement("participant-1", bpm=80)
 
-    p1 = hub.snapshot()["participants"][0]
+    snap = hub.snapshot()
+    p1 = snap["participants"][0]
     assert p1["session"] == {"min": 80, "max": 80, "avg": 80, "count": 1}
     assert len(p1["samples"]) == 1
+    # The new session's clock starts at its first reading.
+    assert snap["sessionStartedAt"] is not None
+
+
+async def test_idle_session_auto_closes():
+    closed = []
+    h = TelemetryHub(stale_after_s=0.1, idle_close_s=0.3)
+    h.register_participant("p1", "One")
+    h.set_session_close_callback(lambda: closed.append(True))
+    await h.update_measurement("p1", bpm=100)
+    h.start_watchdog()
+    try:
+        await asyncio.sleep(0.7)
+    finally:
+        await h.stop_watchdog()
+
+    snap = h.snapshot()
+    p1 = snap["participants"][0]
+    # Session closed: stats gone, panel hidden, clock off, boundary recorded.
+    assert snap["sessionStartedAt"] is None
+    assert p1["session"]["count"] == 0
+    assert p1["active"] is False
+    assert p1["bpm"] is None
+    assert closed == [True]
+
+    # The next reading starts a brand-new session (never re-uses the old one).
+    await h.update_measurement("p1", bpm=90)
+    snap = h.snapshot()
+    assert snap["sessionStartedAt"] is not None
+    assert snap["participants"][0]["active"] is True
+    assert snap["participants"][0]["session"] == {"min": 90, "max": 90, "avg": 90, "count": 1}
 
 
 async def test_watchdog_marks_stale(hub):

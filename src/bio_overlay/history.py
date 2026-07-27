@@ -89,6 +89,33 @@ def read_records(directory: str | Path, date_str: str) -> list[dict]:
     return out
 
 
+def trailing_records(
+    records: list[dict], max_gap_s: float, now: datetime | None = None
+) -> list[dict]:
+    """The tail of `records` belonging to the still-open session, if any.
+
+    Used when re-seeding live state after a restart: a gap of max_gap_s or
+    more between consecutive readings is a session boundary (matching the
+    hub's idle auto-close), so only records after the last such gap are kept —
+    and if even the newest record is older than max_gap_s, that session is
+    closed too and nothing is seeded. Records must be chronological with ISO
+    "t" timestamps (as produced by read_records)."""
+    if not records:
+        return []
+    try:
+        times = [datetime.fromisoformat(r["t"]) for r in records]
+    except (KeyError, ValueError, TypeError):
+        return records  # malformed timestamps: fall back to seeding everything
+    now = now if now is not None else datetime.now(times[-1].tzinfo)
+    if (now - times[-1]).total_seconds() >= max_gap_s:
+        return []
+    start = 0
+    for i in range(1, len(times)):
+        if (times[i] - times[i - 1]).total_seconds() >= max_gap_s:
+            start = i
+    return records[start:]
+
+
 def _parse_sessions(path: Path) -> list[dict]:
     """Split one day's file into sessions: each header line starts a new one."""
     sessions: list[dict] = []

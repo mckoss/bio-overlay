@@ -265,10 +265,9 @@
         panels.delete(id);
       }
     }
-    if (state.sessionStartedAt) {
-      const d = new Date(state.sessionStartedAt);
-      sessionStartedAt = isNaN(d) ? null : d;
-    }
+    // Null when no session is open (e.g. after an idle auto-close).
+    const started = state.sessionStartedAt ? new Date(state.sessionStartedAt) : null;
+    sessionStartedAt = started && !isNaN(started) ? started : null;
     // Only show the clock alongside panels — an idle overlay stays blank.
     renderSessionClock(seen.size > 0);
   }
