@@ -27,12 +27,27 @@ from .telemetry import TelemetryHub
 
 
 def _resolve_config_path(args: argparse.Namespace) -> str:
-    return args.config or str(default_config_path())
+    # Absolute, so logs and the setup page show unambiguously which file is used.
+    return str(Path(args.config).resolve() if args.config else default_config_path())
 
 
 def _load_config(args: argparse.Namespace) -> AppConfig:
     path = Path(_resolve_config_path(args))
-    config = AppConfig.load(path) if path.exists() else AppConfig.default()
+    if path.exists():
+        config = AppConfig.load(path)
+        logging.info(
+            "loaded config from %s (%d participant(s))", path, len(config.participants)
+        )
+    elif args.config:
+        # An explicit -c pointing at a missing file is an error, not a silent
+        # fall-through to defaults (which looks like an "empty" config).
+        sys.exit(f"Error: config file not found: {path}")
+    else:
+        config = AppConfig.default()
+        logging.info(
+            "no config file at %s; using built-in defaults (1 unconfigured participant)",
+            path,
+        )
     if getattr(args, "host", None):
         config.host = args.host
     if getattr(args, "port", None):
