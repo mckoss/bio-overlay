@@ -21,6 +21,7 @@ from __future__ import annotations
 import errno
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -88,16 +89,29 @@ async def _on_shutdown(app: web.Application) -> None:
         await ws.close(code=WSCloseCode.GOING_AWAY, message=b"server shutdown")
 
 
-async def _index(request: web.Request) -> web.FileResponse:
-    return web.FileResponse(OVERLAY_DIR / "index.html")
+# Version-stamp asset references (config.js -> config.js?v=1.2.3) so an HTML
+# page and the scripts/styles it loads always update as a matched pair: new
+# HTML references new URLs, which can never hit a stale cache entry. Guards
+# against caches that ignore Cache-Control (e.g. OBS's embedded browser).
+_ASSET_REF_RE = re.compile(r'((?:src|href)=")([^"?]+\.(?:js|css))(")')
 
 
-async def _config_page(request: web.Request) -> web.FileResponse:
-    return web.FileResponse(OVERLAY_DIR / "config.html")
+def _versioned_page(name: str) -> web.Response:
+    html = (OVERLAY_DIR / name).read_text(encoding="utf-8")
+    html = _ASSET_REF_RE.sub(rf"\g<1>\g<2>?v={__version__}\g<3>", html)
+    return web.Response(text=html, content_type="text/html")
 
 
-async def _history_page(request: web.Request) -> web.FileResponse:
-    return web.FileResponse(OVERLAY_DIR / "history.html")
+async def _index(request: web.Request) -> web.Response:
+    return _versioned_page("index.html")
+
+
+async def _config_page(request: web.Request) -> web.Response:
+    return _versioned_page("config.html")
+
+
+async def _history_page(request: web.Request) -> web.Response:
+    return _versioned_page("history.html")
 
 
 async def _api_history(request: web.Request) -> web.Response:
