@@ -111,6 +111,39 @@ def test_seed_history_restores_session_and_sparkline(hub):
     assert p1["samples"][0][1] == 150
 
 
+async def test_reset_session_clears_history_keeps_connection(hub):
+    await hub.update_measurement("participant-1", bpm=120, rr_intervals_ms=[500.0])
+    await hub.update_measurement("participant-1", bpm=130)
+
+    received = []
+
+    async def sub(msg):
+        received.append(msg)
+
+    hub.subscribe(sub)
+    await hub.reset_session()
+
+    assert received, "reset should broadcast the cleared state"
+    p1 = received[-1]["participants"][0]
+    # History is gone...
+    assert p1["session"] == {"min": None, "max": None, "avg": None, "count": 0}
+    assert p1["samples"] == []
+    # ...but the live connection and latest reading survive.
+    assert p1["connected"] is True
+    assert p1["active"] is True
+    assert p1["bpm"] == 130
+
+
+async def test_reset_session_then_new_readings_accumulate(hub):
+    await hub.update_measurement("participant-1", bpm=120)
+    await hub.reset_session()
+    await hub.update_measurement("participant-1", bpm=80)
+
+    p1 = hub.snapshot()["participants"][0]
+    assert p1["session"] == {"min": 80, "max": 80, "avg": 80, "count": 1}
+    assert len(p1["samples"]) == 1
+
+
 async def test_watchdog_marks_stale(hub):
     received = []
 

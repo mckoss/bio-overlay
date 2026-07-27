@@ -13,6 +13,7 @@ Endpoints:
     GET  /api/config  -> current config as JSON
     PUT  /api/config  -> save config to disk
     GET  /api/scan    -> discover nearby straps (deviceId, name, address)
+    POST /api/new-session -> clear session stats/sparklines and start fresh
 """
 
 from __future__ import annotations
@@ -121,6 +122,16 @@ async def _healthz(_request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def _new_session(request: web.Request) -> web.Response:
+    """Start a fresh session (used by the setup page's Start-new-session button)."""
+    cb = request.app.get("start_new_session")
+    if cb is None:
+        raise web.HTTPNotImplemented(reason="new session not available")
+    await cb()
+    logger.info("new session started via /api/new-session")
+    return web.json_response({"ok": True})
+
+
 async def _quit(request: web.Request) -> web.Response:
     """Ask the app to shut down (used by the Quit button on the setup page)."""
     cb = request.app.get("request_shutdown")
@@ -213,6 +224,7 @@ def build_app(
     apply_config=None,
     history_dir: str | None = None,
     request_shutdown=None,
+    start_new_session=None,
 ) -> web.Application:
     app = web.Application()
     app["hub"] = hub
@@ -221,6 +233,7 @@ def build_app(
     app["apply_config"] = apply_config
     app["history_dir"] = history_dir
     app["request_shutdown"] = request_shutdown
+    app["start_new_session"] = start_new_session
     app["websockets"] = set()
     app.on_shutdown.append(_on_shutdown)
     app.add_routes(
@@ -235,6 +248,7 @@ def build_app(
             web.get("/api/scan", _scan),
             web.get("/api/history", _api_history),
             web.get("/api/history/{id}", _api_session),
+            web.post("/api/new-session", _new_session),
             web.post("/api/quit", _quit),
         ]
     )
@@ -274,6 +288,7 @@ async def run_server(
     port_scan: bool = False,
     history_dir: str | None = None,
     request_shutdown=None,
+    start_new_session=None,
 ) -> tuple[web.AppRunner, int]:
     """Start the server; return (runner, actual_port). Caller cleans up the runner."""
     app = build_app(
@@ -283,6 +298,7 @@ async def run_server(
         apply_config=apply_config,
         history_dir=history_dir,
         request_shutdown=request_shutdown,
+        start_new_session=start_new_session,
     )
     runner = web.AppRunner(app)
     await runner.setup()
