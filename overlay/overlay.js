@@ -53,13 +53,14 @@
     const root = el("div", "panel");
     const nameEl = el("div", "name");
 
-    const metrics = el("div", "metrics");
     const live = el("div", "live");
     const bpmEl = el("div", "bpm", "--");
     const unitEl = el("div", "unit", "BPM");
     const zoneEl = el("div", "zone");
     live.append(bpmEl, unitEl, zoneEl);
 
+    // The sparkline sits beside the name AND the live BPM (grid area spans
+    // both rows) so the chart gets as much vertical space as possible.
     const spark = el("div", "spark");
     const sparkEl = el("div", "spark-svg");
     const bounds = el("div", "spark-bounds");
@@ -68,13 +69,11 @@
     bounds.append(maxEl, minEl);
     spark.append(sparkEl, bounds);
 
-    metrics.append(live, spark);
-
     const sessionEl = el("div", "session");
     const respEl = el("div", "resp");
     const badgeEl = el("div", "badge");
 
-    root.append(nameEl, metrics, sessionEl, respEl, badgeEl);
+    root.append(nameEl, live, spark, sessionEl, respEl, badgeEl);
     panelsEl.appendChild(root);
 
     panel = { root, nameEl, bpmEl, zoneEl, sparkEl, maxEl, minEl, sessionEl, respEl, badgeEl };

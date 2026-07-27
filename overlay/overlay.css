@@ -52,10 +52,19 @@ body {
   gap: 1rem;
 }
 
+/* The sparkline spans the name + live rows on the right, so the intensity
+   bands get the full height of the card's upper half. */
 .panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name spark"
+    "live spark"
+    "session session"
+    "resp resp"
+    "badge badge";
+  column-gap: 1rem;
+  row-gap: 0.45rem;
   padding: 0.8rem 1.2rem;
   min-width: 21rem;
   background: var(--panel-bg);
@@ -66,19 +75,27 @@ body {
 }
 
 .panel .name {
+  grid-area: name;
   font-size: 1.55rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text);
 }
 
-.panel .metrics {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+.panel .session {
+  grid-area: session;
+}
+
+.panel .resp {
+  grid-area: resp;
+}
+
+.panel .badge {
+  grid-area: badge;
 }
 
 .panel .live {
+  grid-area: live;
   display: flex;
   align-items: baseline;
   gap: 0.35rem;
@@ -186,17 +203,20 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
-/* Sparkline: SVG of the last 5 minutes, with window min/max to its right. */
+/* Sparkline: SVG of the last 5 minutes. Its grid area spans the name and
+   live-BPM rows, so the chart fills the card's full upper-half height. */
 .panel .spark {
-  margin-left: auto;
+  grid-area: spark;
+  align-self: stretch;
   display: flex;
   align-items: stretch;
   gap: 0.4rem;
 }
 
 .panel .spark-svg {
-  width: 12rem;
-  height: 4.5rem;
+  /* Responsive width: fits beside the BPM+chip at 720p, grows at 1080p. */
+  width: clamp(9rem, 10vw, 13rem);
+  min-height: 5.5rem; /* floor; normally stretched by the grid rows */
 }
 
 .panel .spark-svg svg {
