@@ -217,6 +217,20 @@ async def _scan(request: web.Request) -> web.Response:
     )
 
 
+@web.middleware
+async def _no_cache_middleware(request: web.Request, handler):
+    """Make browsers revalidate every asset on each load.
+
+    Without this, Chrome caches page assets heuristically (there is no
+    Cache-Control header), so after an app update a page could run a stale
+    config.js against fresh config.html (or vice versa) — a mismatch that
+    breaks the page. `no-cache` still allows cheap 304s on localhost.
+    """
+    response = await handler(request)
+    response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
+
 def build_app(
     hub: TelemetryHub,
     config: AppConfig | None = None,
@@ -226,7 +240,7 @@ def build_app(
     request_shutdown=None,
     start_new_session=None,
 ) -> web.Application:
-    app = web.Application()
+    app = web.Application(middlewares=[_no_cache_middleware])
     app["hub"] = hub
     app["config"] = config
     app["config_path"] = config_path
