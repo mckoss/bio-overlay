@@ -63,11 +63,8 @@
     // both rows) so the chart gets as much vertical space as possible.
     const spark = el("div", "spark");
     const sparkEl = el("div", "spark-svg");
-    const bounds = el("div", "spark-bounds");
-    const maxEl = el("div", "spark-max", "--");
-    const minEl = el("div", "spark-min", "--");
-    bounds.append(maxEl, minEl);
-    spark.append(sparkEl, bounds);
+    const boundsEl = el("div", "spark-bounds");
+    spark.append(sparkEl, boundsEl);
 
     const sessionEl = el("div", "session");
     const respEl = el("div", "resp");
@@ -76,7 +73,7 @@
     root.append(nameEl, live, spark, sessionEl, respEl, badgeEl);
     panelsEl.appendChild(root);
 
-    panel = { root, nameEl, bpmEl, zoneEl, sparkEl, maxEl, minEl, sessionEl, respEl, badgeEl };
+    panel = { root, nameEl, bpmEl, zoneEl, sparkEl, boundsEl, sessionEl, respEl, badgeEl };
     panels.set(participantId, panel);
     return panel;
   }
@@ -104,7 +101,10 @@
       panel.bpmEl.textContent = "--";
     }
 
-    renderZoneChip(panel, live ? zoneFor(p.bpm, p.zones) : null);
+    // The big number and the chip both take the current zone's color.
+    const zone = live ? zoneFor(p.bpm, p.zones) : null;
+    panel.bpmEl.className = "bpm" + (zone ? " " + zone : "");
+    renderZoneChip(panel, zone);
     // History comes from the server, so a reload restores it immediately.
     renderSparkline(panel, p.samples || [], p.zones);
     renderSession(panel, p.session);
@@ -156,10 +156,18 @@
     return [Math.round(zones.maxHr * 0.45), Math.round(zones.maxHr * 1.05)];
   }
 
-  // Place an axis label at its position on the chart (percent of height).
-  function setBound(el, value, yPos) {
-    el.textContent = String(value);
-    el.style.top = `${((yPos / SPARK_H) * 100).toFixed(1)}%`;
+  // Axis labels beside the chart. With zones: every gridline, as a percent of
+  // max HR (50% / 65% / 80% / 100%). Without: the window min/max in BPM.
+  function renderBounds(panel, zones, y, dataLo, dataHi) {
+    const tick = (yPos, text) =>
+      `<div class="tick" style="top:${((yPos / SPARK_H) * 100).toFixed(1)}%">${text}</div>`;
+    if (zones && Array.isArray(zones.divisors)) {
+      panel.boundsEl.innerHTML = zones.divisors
+        .map((d) => tick(y(d), `${Math.round((d / zones.maxHr) * 100)}%`))
+        .join("");
+    } else {
+      panel.boundsEl.innerHTML = tick(y(dataHi), dataHi) + tick(y(dataLo), dataLo);
+    }
   }
 
   // Translucent band rects + hairlines at the divisors, behind the line.
@@ -190,10 +198,7 @@
 
     if (!s.length) {
       panel.sparkEl.innerHTML = "";
-      panel.maxEl.textContent = "--";
-      panel.maxEl.style.top = "0%";
-      panel.minEl.textContent = "--";
-      panel.minEl.style.top = "100%";
+      panel.boundsEl.innerHTML = "";
       return;
     }
 
@@ -211,15 +216,7 @@
     const y = (bpm) =>
       SPARK_PAD_Y + (1 - (Math.min(hi, Math.max(lo, bpm)) - lo) / span) * innerH;
 
-    // Axis labels: with zones, the max HR and the rest threshold, each pinned
-    // to its gridline; otherwise the window's own min/max at the extremes.
-    if (zones && Array.isArray(zones.divisors)) {
-      setBound(panel.maxEl, zones.maxHr, y(zones.maxHr));
-      setBound(panel.minEl, zones.divisors[0], y(zones.divisors[0]));
-    } else {
-      setBound(panel.maxEl, dataHi, y(dataHi));
-      setBound(panel.minEl, dataLo, y(dataLo));
-    }
+    renderBounds(panel, zones, y, dataLo, dataHi);
 
     const pts = s.map(([t, bpm]) => `${x(t).toFixed(1)},${y(bpm).toFixed(1)}`);
     const [lastT, lastBpm] = s[s.length - 1];

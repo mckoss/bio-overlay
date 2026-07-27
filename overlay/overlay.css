@@ -123,6 +123,28 @@ body {
   --zone-over: #ff2e33;
 }
 
+/* The big BPM number takes the current zone's color. */
+.panel .bpm.rest {
+  color: var(--zone-rest);
+}
+
+.panel .bpm.light {
+  color: var(--zone-light);
+}
+
+.panel .bpm.medium {
+  color: var(--zone-medium);
+}
+
+.panel .bpm.heavy {
+  color: var(--zone-heavy);
+}
+
+.panel .bpm.over {
+  color: var(--zone-over);
+  animation: over-pulse 0.8s ease-in-out infinite;
+}
+
 /* Zone chip next to the live BPM: REST / LIGHT / MEDIUM / HEAVY / OVER MAX. */
 .panel .zone {
   align-self: center;
@@ -244,19 +266,18 @@ body {
   fill: var(--accent);
 }
 
-/* Axis labels, pinned to their gridlines: with zones, the max HR (100% line)
-   and the rest threshold (50% line); otherwise the window min/max. */
+/* Axis labels, one per gridline: percent of max HR with zones (50%..100%),
+   window min/max BPM without. */
 .panel .spark-bounds {
   position: relative;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  min-width: 3ch;
+  min-width: 4ch;
 }
 
-.panel .spark-max,
-.panel .spark-min {
+.panel .spark-bounds .tick {
   position: absolute;
   left: 0;
   transform: translateY(-50%);

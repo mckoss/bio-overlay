@@ -171,14 +171,19 @@
         pts.map((p) => `L ${p}`).join(" ") +
         ` L ${x(sN).toFixed(1)},${SPARK_H} Z"/>`;
 
-    // Axis labels pinned to their gridlines: with zones, max HR and the rest
-    // threshold; otherwise the data min/max.
+    // Axis labels pinned to their gridlines: with zones, every divisor as a
+    // percent of max HR (50%..100%); otherwise the data min/max in BPM.
     const pct = (v) => ((v / SPARK_H) * 100).toFixed(1) + "%";
     const labels = banded
-      ? `<span class="y-max" style="top:${pct(y(zones.maxHr))}">${zones.maxHr}</span>` +
-        `<span class="y-min" style="top:${pct(y(zones.divisors[0]))}">${zones.divisors[0]}</span>`
-      : `<span class="y-max" style="top:${pct(y(dataHi))}">${dataHi}</span>` +
-        `<span class="y-min" style="top:${pct(y(dataLo))}">${dataLo}</span>`;
+      ? zones.divisors
+          .map(
+            (d) =>
+              `<span class="y-tick" style="top:${pct(y(d))}">` +
+              `${Math.round((d / zones.maxHr) * 100)}%</span>`
+          )
+          .join("")
+      : `<span class="y-tick" style="top:${pct(y(dataHi))}">${dataHi}</span>` +
+        `<span class="y-tick" style="top:${pct(y(dataLo))}">${dataLo}</span>`;
 
     wrap.innerHTML =
       `<svg viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none">` +

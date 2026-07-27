@@ -215,8 +215,7 @@ h2 {
 }
 
 /* Axis labels; JS pins each to its gridline via an inline top. */
-.p-spark .y-max,
-.p-spark .y-min {
+.p-spark .y-tick {
   position: absolute;
   right: 0;
   transform: translateY(-50%);
