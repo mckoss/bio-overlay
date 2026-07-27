@@ -24,6 +24,7 @@
   const SPARK_PAD_Y = 5;
 
   const panelsEl = document.getElementById("panels");
+  const clockEl = document.getElementById("session-clock");
   const statusEl = document.getElementById("status");
 
   // Debug/keying aid: `?bg=green` (or any CSS color) paints the otherwise
@@ -195,7 +196,35 @@
         panels.delete(id);
       }
     }
+    if (state.sessionStartedAt) {
+      const d = new Date(state.sessionStartedAt);
+      sessionStartedAt = isNaN(d) ? null : d;
+    }
+    // Only show the clock alongside panels — an idle overlay stays blank.
+    renderSessionClock(seen.size > 0);
   }
+
+  // Session clock: "Start: HH:MM · Duration: N minutes" at the bottom center.
+  let sessionStartedAt = null;
+  let clockVisible = false;
+
+  function renderSessionClock(visible) {
+    clockVisible = visible;
+    if (!visible || !sessionStartedAt) {
+      clockEl.textContent = "";
+      return;
+    }
+    const hhmm = sessionStartedAt.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const mins = Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000));
+    clockEl.textContent =
+      `Start: ${hhmm} · Duration: ${mins} ${mins === 1 ? "minute" : "minutes"}`;
+  }
+
+  // Keep the duration fresh even when no telemetry is arriving.
+  setInterval(() => renderSessionClock(clockVisible), 30000);
 
   function setStatus(online) {
     statusEl.classList.toggle("online", online);

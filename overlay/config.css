@@ -91,55 +91,13 @@ h2 {
 /* Participant rows */
 .participant {
   display: grid;
-  grid-template-columns: 4.2rem 1fr 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr 1fr auto;
   gap: 0.6rem;
   align-items: end;
   padding: 0.7rem;
   background: var(--panel-2);
   border-radius: var(--radius);
   margin-bottom: 0.6rem;
-}
-
-/* Live band status: pulsing heart + BPM while the strap is sending readings. */
-.participant .live {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  align-self: end;
-  padding-bottom: 0.5rem;
-  color: var(--muted);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.participant .live .heart {
-  display: inline-block; /* transforms don't apply to inline elements */
-  opacity: 0.35;
-}
-
-.participant .live.reading {
-  color: var(--text);
-}
-
-.participant .live.reading .heart {
-  color: var(--accent);
-  opacity: 1;
-  animation: heartbeat 1s ease-in-out infinite;
-}
-
-.live-example {
-  color: var(--accent);
-}
-
-@keyframes heartbeat {
-  0%,
-  30%,
-  100% {
-    transform: scale(1);
-  }
-  15% {
-    transform: scale(1.35);
-  }
 }
 
 .field {
@@ -290,25 +248,6 @@ select:focus {
   border: 0;
   transform-origin: 0 0; /* scale set from JS: preview width / 1920 */
   pointer-events: none;
-}
-
-.session-clock {
-  position: absolute;
-  left: 50%;
-  bottom: 0.6rem;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  padding: 0.25rem 0.7rem;
-  border-radius: 1rem;
-  background: rgba(0, 0, 0, 0.6);
-  color: var(--text);
-  font-size: 0.85rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.session-clock:empty {
-  display: none;
 }
 
 .obs-url {
