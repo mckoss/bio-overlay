@@ -87,6 +87,29 @@ def test_read_records_missing_returns_empty(tmp_path):
     assert read_records(tmp_path, "2026-01-01") == []
 
 
+def test_trailing_records_splits_on_gap():
+    from bio_overlay.history import trailing_records
+
+    def rec(minute, bpm):
+        return {"t": f"2026-06-26T10:{minute:02d}:00+00:00", "p": "a", "bpm": bpm}
+
+    records = [rec(0, 70), rec(5, 72), rec(45, 90), rec(50, 95)]  # 40-min gap
+    now = datetime(2026, 6, 26, 10, 55, tzinfo=timezone.utc)
+
+    # Only the segment after the last >=30-min gap survives.
+    tail = trailing_records(records, 30 * 60, now=now)
+    assert [r["bpm"] for r in tail] == [90, 95]
+
+    # If even the newest record is >=30 min old, the session is closed: seed nothing.
+    later = datetime(2026, 6, 26, 11, 30, tzinfo=timezone.utc)
+    assert trailing_records(records, 30 * 60, now=later) == []
+
+    # No gaps and fresh: everything survives.
+    fresh = [rec(40, 80), rec(45, 82), rec(50, 84)]
+    assert trailing_records(fresh, 30 * 60, now=now) == fresh
+    assert trailing_records([], 30 * 60, now=now) == []
+
+
 async def test_reset_session_header_and_seeding(tmp_path):
     w = DailyHistoryWriter(tmp_path)
     w.start_session(_participants("mike-koss"))

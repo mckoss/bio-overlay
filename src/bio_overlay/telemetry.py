@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -23,6 +24,8 @@ from typing import Awaitable, Callable
 
 from .respiration import estimate_respiration
 from .zones import zones_for
+
+logger = logging.getLogger(__name__)
 
 # If no fresh measurement arrives within this many seconds, the participant is
 # marked stale even if the BLE link still claims to be connected.
@@ -33,6 +36,10 @@ DEFAULT_HISTORY_WINDOW_S = 5 * 60
 
 # How much recent RR history to retain for the (experimental) respiration estimate.
 DEFAULT_RESP_WINDOW_S = 60
+
+# After this long without any reading, the session auto-closes: stats clear,
+# panels hide, and the next reading (whenever it comes) starts a new session.
+DEFAULT_IDLE_CLOSE_S = 30 * 60
 
 
 def _now() -> datetime:
@@ -149,19 +156,27 @@ class TelemetryHub:
         history_window_s: float = DEFAULT_HISTORY_WINDOW_S,
         resp_window_s: float = DEFAULT_RESP_WINDOW_S,
         enable_respiration: bool = False,
+        idle_close_s: float = DEFAULT_IDLE_CLOSE_S,
     ) -> None:
         self._participants: dict[str, ParticipantState] = {}
         self._subscribers: set[Subscriber] = set()
-        # When the current session began: process start, the first seeded
-        # reading after a restart, or the last user-initiated reset.
-        self._session_started_at = _now()
+        # When the current session began: stamped by the first reading (live or
+        # seeded) after startup, an idle auto-close, or a manual reset. None
+        # while no session is open.
+        self._session_started_at: datetime | None = None
+        # When the last reading arrived, for the idle auto-close.
+        self._last_data_at: datetime | None = None
         self._stale_after_s = stale_after_s
         self._history_window_ms = int(history_window_s * 1000)
         self._resp_window_ms = int(resp_window_s * 1000)
+        self._idle_close_s = idle_close_s
         # Experimental respiration estimate is hidden unless enabled.
         self._enable_respiration = enable_respiration
         self._watchdog_task: asyncio.Task | None = None
         self._recorder: Recorder | None = None
+        # Called (sync) when the session auto-closes, e.g. so the history
+        # writer marks a reset boundary that seeding won't cross.
+        self._on_session_close: Callable[[], None] | None = None
 
     # -- registration -----------------------------------------------------
 
@@ -215,6 +230,10 @@ class TelemetryHub:
         """Register a sink called for each valid reading (e.g. a history file)."""
         self._recorder = recorder
 
+    def set_session_close_callback(self, callback: Callable[[], None] | None) -> None:
+        """Register a hook run when the session auto-closes after idling."""
+        self._on_session_close = callback
+
     def seed_history(self, records: list[dict]) -> None:
         """Rebuild session stats and rolling windows from prior records.
 
@@ -241,10 +260,12 @@ class TelemetryHub:
                 continue
             at_ms = int(at.timestamp() * 1000)
             # Records are chronological: the first restored reading marks when
-            # the (still in-progress) session started.
+            # the (still in-progress) session started, the last one feeds the
+            # idle auto-close timer.
             if session_start is None:
                 session_start = at
                 self._session_started_at = at
+            self._last_data_at = at
             # Today had data for this participant, so show it on restart.
             state.active = True
             # Whole-session aggregates use every reading from the file.
@@ -276,9 +297,10 @@ class TelemetryHub:
 
     def snapshot(self) -> dict:
         """Full state for all participants, in registration order."""
+        started = self._session_started_at
         return {
             "type": "state",
-            "sessionStartedAt": self._session_started_at.isoformat(timespec="seconds"),
+            "sessionStartedAt": started.isoformat(timespec="seconds") if started else None,
             "participants": [
                 p.to_message(include_respiration=self._enable_respiration)
                 for p in self._participants.values()
@@ -302,6 +324,10 @@ class TelemetryHub:
             return
         state.active = True
         now = _now()
+        # Any reading opens a session (if none is open) and feeds the idle timer.
+        if self._session_started_at is None:
+            self._session_started_at = now
+        self._last_data_at = now
         state.bpm = bpm
         state.rr_intervals_ms = rr_intervals_ms or []
         state.sensor_contact = sensor_contact
@@ -319,13 +345,15 @@ class TelemetryHub:
                 self._recorder(state, bpm, state.rr_intervals_ms, now)
         await self._broadcast()
 
-    async def reset_session(self) -> None:
-        """Start a fresh session: drop sparklines and session aggregates.
+    async def reset_session(self, deactivate: bool = False) -> None:
+        """Close the session: drop sparklines and session aggregates.
 
-        Connection state and the latest reading are kept — the straps are still
-        on the participants; only the accumulated history is cleared.
+        The next reading starts (and timestamps) a new session. For a manual
+        reset, connection state and the latest reading are kept — the straps
+        are still on the participants. An idle auto-close passes
+        ``deactivate=True`` so the panels disappear from the overlay too.
         """
-        self._session_started_at = _now()
+        self._session_started_at = None
         for state in self._participants.values():
             state.samples.clear()
             state.session_min = None
@@ -335,6 +363,10 @@ class TelemetryHub:
             state.rr_window.clear()
             state.respiration_brpm = None
             state.respiration_confidence = None
+            if deactivate:
+                state.active = False
+                state.bpm = None
+                state.rr_intervals_ms = []
         await self._broadcast()
 
     async def set_connected(self, participant_id: str, connected: bool) -> None:
@@ -375,6 +407,20 @@ class TelemetryHub:
                     changed = True
             if changed:
                 await self._broadcast()
+            await self._maybe_close_idle_session(now)
+
+    async def _maybe_close_idle_session(self, now: datetime) -> None:
+        """Auto-close the session after idle_close_s without any reading, so a
+        stale session is never blended into (or re-used by) the next one."""
+        if self._session_started_at is None or self._last_data_at is None:
+            return
+        idle_s = (now - self._last_data_at).total_seconds()
+        if idle_s <= self._idle_close_s:
+            return
+        logger.info("closing session after %.0f minutes without data", idle_s / 60)
+        await self.reset_session(deactivate=True)
+        if self._on_session_close is not None:
+            self._on_session_close()
 
     # -- internal ---------------------------------------------------------
 

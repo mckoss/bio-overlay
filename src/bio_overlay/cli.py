@@ -109,12 +109,15 @@ async def _serve_with_source(
     if history_dir:
         from datetime import datetime, timezone
 
-        from .history import DailyHistoryWriter, read_records
+        from .history import DailyHistoryWriter, read_records, trailing_records
+        from .telemetry import DEFAULT_IDLE_CLOSE_S
 
         # Restore an in-progress session from today's file so a server restart
         # mid-session keeps the sparkline, session stats, and respiration.
+        # Only the still-open session is restored: a 30-minute gap (matching
+        # the idle auto-close) is a session boundary that seeding won't cross.
         today = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d")
-        seeded = read_records(history_dir, today)
+        seeded = trailing_records(read_records(history_dir, today), DEFAULT_IDLE_CLOSE_S)
         if seeded:
             hub.seed_history(seeded)
             logging.info("restored %d readings from %s/%s.jsonl", len(seeded), history_dir, today)
@@ -123,6 +126,9 @@ async def _serve_with_source(
         writer.start()
         writer.start_session(config.participants)
         hub.set_recorder(writer.record)
+        # When the hub auto-closes an idle session, mark a reset boundary in
+        # the history file so no restart can re-use the closed session.
+        hub.set_session_close_callback(writer.reset_session)
         logging.info("recording history to %s/YYYY-MM-DD.jsonl", history_dir)
 
     source = source_factory(config, hub) if source_factory else None
