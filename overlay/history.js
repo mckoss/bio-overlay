@@ -107,21 +107,52 @@
         `<span>${st.count} samples</span>`;
       card.append(stats);
 
-      card.append(sparkline(p.points || []));
+      card.append(sparkline(p.points || [], p.zones));
       detailEl.appendChild(card);
     }
   }
 
-  function sparkline(points) {
+  const ZONE_NAMES = ["rest", "light", "medium", "heavy", "over"];
+
+  // Translucent intensity bands + hairlines at the divisors (when the current
+  // config knows the participant's HR range).
+  function zoneBandsSvg(zones, lo, hi, y) {
+    if (!zones || !Array.isArray(zones.divisors)) return "";
+    const edges = [lo, ...zones.divisors, hi];
+    let svg = "";
+    for (let i = 0; i < ZONE_NAMES.length; i++) {
+      const top = y(Math.min(edges[i + 1], hi));
+      const bottom = y(Math.max(edges[i], lo));
+      if (bottom <= top) continue;
+      svg += `<rect class="band ${ZONE_NAMES[i]}" x="0" y="${top.toFixed(1)}" ` +
+        `width="${SPARK_W}" height="${(bottom - top).toFixed(1)}"/>`;
+    }
+    for (const d of zones.divisors) {
+      if (d <= lo || d >= hi) continue;
+      svg += `<line class="band-line" x1="0" y1="${y(d).toFixed(1)}" ` +
+        `x2="${SPARK_W}" y2="${y(d).toFixed(1)}"/>`;
+    }
+    return svg;
+  }
+
+  function sparkline(points, zones) {
     const wrap = el("div", "p-spark");
     if (points.length < 2) {
       wrap.appendChild(el("span", "hint", "not enough data"));
       return wrap;
     }
-    let lo = Infinity, hi = -Infinity, s0 = points[0][0], sN = points[points.length - 1][0];
+    let dataLo = Infinity, dataHi = -Infinity;
+    const s0 = points[0][0], sN = points[points.length - 1][0];
     for (const [, bpm] of points) {
-      if (bpm < lo) lo = bpm;
-      if (bpm > hi) hi = bpm;
+      if (bpm < dataLo) dataLo = bpm;
+      if (bpm > dataHi) dataHi = bpm;
+    }
+    // Anchor the y-scale to the participant's HR range so the bands are
+    // stable gridlines; fall back to the data range without zones.
+    let lo = dataLo, hi = dataHi;
+    if (zones && Array.isArray(zones.divisors)) {
+      lo = Math.min(dataLo, Math.round(zones.maxHr * 0.45));
+      hi = Math.max(dataHi, Math.round(zones.maxHr * 1.05));
     }
     const span = hi - lo || 1;
     const sSpan = sN - s0 || 1;
@@ -129,17 +160,21 @@
     const x = (s) => ((s - s0) / sSpan) * SPARK_W;
     const y = (bpm) => SPARK_PAD + (1 - (bpm - lo) / span) * innerH;
     const pts = points.map(([s, bpm]) => `${x(s).toFixed(1)},${y(bpm).toFixed(1)}`);
-    const area =
-      `M ${x(s0).toFixed(1)},${SPARK_H} ` +
-      pts.map((p) => `L ${p}`).join(" ") +
-      ` L ${x(sN).toFixed(1)},${SPARK_H} Z`;
+    const bands = zoneBandsSvg(zones, lo, hi, y);
+    // With zone bands, the area fill just muddies the band colors — skip it.
+    const area = bands
+      ? ""
+      : `<path class="spark-area" d="M ${x(s0).toFixed(1)},${SPARK_H} ` +
+        pts.map((p) => `L ${p}`).join(" ") +
+        ` L ${x(sN).toFixed(1)},${SPARK_H} Z"/>`;
 
     wrap.innerHTML =
       `<svg viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none">` +
-      `<path class="spark-area" d="${area}"/>` +
+      bands +
+      area +
       `<polyline class="spark-line" points="${pts.join(" ")}"/>` +
       `</svg>` +
-      `<span class="y-max">${hi}</span><span class="y-min">${lo}</span>`;
+      `<span class="y-max">${dataHi}</span><span class="y-min">${dataLo}</span>`;
     return wrap;
   }
 

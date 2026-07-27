@@ -1,0 +1,37 @@
+"""Tests for Tanaka HRmax and workout-intensity zone computation."""
+
+from bio_overlay.zones import max_heart_rate, zones_for
+
+
+def test_tanaka_max_heart_rate():
+    # Age 66: 208 - 0.7 * 66 = 161.8 -> 162
+    assert max_heart_rate(1960, year=2026) == 162
+    # Age 30: 208 - 21 = 187
+    assert max_heart_rate(1996, year=2026) == 187
+
+
+def test_implausible_birth_year_rejected():
+    assert max_heart_rate(None) is None
+    assert max_heart_rate(65, year=2026) is None  # someone typed an age
+    assert max_heart_rate(2025, year=2026) is None  # infant
+    assert max_heart_rate(1899, year=2026) is None
+
+
+def test_zones_divisors_at_50_65_80_100_percent():
+    z = zones_for(None, max_hr=160)
+    assert z == {"maxHr": 160, "divisors": [80, 104, 128, 160]}
+
+
+def test_zones_from_birth_year():
+    z = zones_for(1960, year=2026)  # HRmax 162
+    assert z["maxHr"] == 162
+    assert z["divisors"] == [81, 105, 130, 162]
+
+
+def test_explicit_max_overrides_formula():
+    assert zones_for(1960, max_hr=175, year=2026)["maxHr"] == 175
+
+
+def test_no_config_no_zones():
+    assert zones_for(None) is None
+    assert zones_for(None, max_hr=0) is None

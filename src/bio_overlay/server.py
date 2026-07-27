@@ -124,11 +124,19 @@ async def _api_history(request: web.Request) -> web.Response:
 
 async def _api_session(request: web.Request) -> web.Response:
     from .history import load_session
+    from .zones import zones_for
 
     directory = request.app["history_dir"]
     session = load_session(directory, request.match_info["id"]) if directory else None
     if session is None:
         raise web.HTTPNotFound(reason="session not found")
+    # Zone info isn't stored in the history file; attach it from the current
+    # config so the charts can band by intensity for known participants.
+    config = request.app.get("config")
+    by_id = {p.id: p for p in config.participants} if config else {}
+    for part in session["participants"]:
+        pc = by_id.get(part.get("id"))
+        part["zones"] = zones_for(pc.birth_year, pc.max_hr) if pc else None
     return web.json_response(session)
 
 

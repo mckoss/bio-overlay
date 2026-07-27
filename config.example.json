@@ -7,13 +7,17 @@
       "id": "participant-1",
       "displayName": "Participant 1",
       "deviceId": null,
-      "namePrefix": "Polar H10"
+      "namePrefix": "Polar H10",
+      "birthYear": null,
+      "maxHr": null
     },
     {
       "id": "participant-2",
       "displayName": "Participant 2",
       "deviceId": null,
-      "namePrefix": "Polar H10"
+      "namePrefix": "Polar H10",
+      "birthYear": null,
+      "maxHr": null
     }
   ]
 }

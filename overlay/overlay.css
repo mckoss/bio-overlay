@@ -97,6 +97,95 @@ body {
   color: var(--muted);
 }
 
+/* Intensity-zone colors (shared by the BPM chip and the sparkline bands). */
+:root {
+  --zone-rest: #7a8699;
+  --zone-light: #2ecc71;
+  --zone-medium: #ffb020;
+  --zone-heavy: #ff7a45;
+  --zone-over: #ff2e33;
+}
+
+/* Zone chip next to the live BPM: REST / LIGHT / MEDIUM / HEAVY / OVER MAX. */
+.panel .zone {
+  align-self: center;
+  margin-left: 0.4rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow: none;
+}
+
+.panel .zone:empty {
+  display: none;
+}
+
+.panel .zone.rest {
+  background: var(--zone-rest);
+}
+
+.panel .zone.light {
+  background: var(--zone-light);
+}
+
+.panel .zone.medium {
+  background: var(--zone-medium);
+  color: #201500;
+}
+
+.panel .zone.heavy {
+  background: var(--zone-heavy);
+}
+
+.panel .zone.over {
+  background: var(--zone-over);
+  animation: over-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes over-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Sparkline zone bands: translucent stripes + hairlines at the divisors. */
+.band {
+  fill-opacity: 0.25;
+}
+
+.band.rest {
+  fill: var(--zone-rest);
+}
+
+.band.light {
+  fill: var(--zone-light);
+}
+
+.band.medium {
+  fill: var(--zone-medium);
+}
+
+.band.heavy {
+  fill: var(--zone-heavy);
+}
+
+.band.over {
+  fill: var(--zone-over);
+}
+
+.band-line {
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
 /* Sparkline: SVG of the last 5 minutes, with window min/max to its right. */
 .panel .spark {
   margin-left: auto;

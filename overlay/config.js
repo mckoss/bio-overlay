@@ -32,12 +32,20 @@
 
   function renderParticipants() {
     participantsEl.innerHTML = "";
+    const optInt = (v) => {
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) ? n : null;
+    };
     config.participants.forEach((p, i) => {
       const row = el("div", "participant");
       row.append(
         field("Display name", p.displayName, (v) => (p.displayName = v)),
         field("ID (key)", p.id, (v) => (p.id = v)),
-        field("Device ID", p.deviceId, (v) => (p.deviceId = v || null))
+        field("Device ID", p.deviceId, (v) => (p.deviceId = v || null)),
+        // Intensity zones: birth year drives the Tanaka HRmax formula; a
+        // known (tested) max HR overrides it. Both optional.
+        field("Born", p.birthYear, (v) => (p.birthYear = optInt(v))),
+        field("Max HR", p.maxHr, (v) => (p.maxHr = optInt(v)))
       );
       const remove = el("button", "btn-remove", "Remove");
       remove.title = "Remove participant";
