@@ -60,6 +60,7 @@
   // each participant row can show whether their strap is actively reading.
 
   const live = new Map(); // participantId -> latest participant message
+  let sessionStartedAt = null; // Date, from the server's snapshot
 
   function connectLive() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -74,10 +75,43 @@
       if (msg.type !== "state" || !Array.isArray(msg.participants)) return;
       live.clear();
       for (const p of msg.participants) live.set(p.participantId, p);
+      if (msg.sessionStartedAt) {
+        const d = new Date(msg.sessionStartedAt);
+        sessionStartedAt = isNaN(d) ? null : d;
+      }
       updateLiveBadges();
+      updateSessionClock();
     });
     // The server may restart (or the page may outlive it); keep retrying.
     ws.addEventListener("close", () => setTimeout(connectLive, 2000));
+  }
+
+  // -- overlay preview ----------------------------------------------------
+  // A real (scaled-down) iframe of the overlay page, so the setup page shows
+  // exactly what OBS will: beating hearts, pulse rates, sparklines.
+
+  const previewEl = document.getElementById("overlay-preview");
+  const frameEl = document.getElementById("overlay-frame");
+  const clockEl = document.getElementById("session-clock");
+
+  function sizePreview() {
+    // The overlay targets a 1920x1080 canvas; render it full-size in the
+    // iframe and scale it down to the preview's width.
+    frameEl.style.transform = `scale(${previewEl.clientWidth / 1920})`;
+  }
+
+  function updateSessionClock() {
+    if (!sessionStartedAt) {
+      clockEl.textContent = "";
+      return;
+    }
+    const hhmm = sessionStartedAt.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const mins = Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000));
+    clockEl.textContent =
+      `Start: ${hhmm} · Duration: ${mins} ${mins === 1 ? "minute" : "minutes"}`;
   }
 
   function updateLiveBadges() {
@@ -209,7 +243,7 @@
   function setupOverlayLinks() {
     const overlayUrl = location.origin + "/";
     document.getElementById("overlay-url").textContent = overlayUrl;
-    document.getElementById("open-overlay").href = overlayUrl;
+    previewEl.href = overlayUrl;
     const copy = document.getElementById("copy-url");
     copy.addEventListener("click", async () => {
       try {
@@ -233,13 +267,11 @@
     ) {
       return;
     }
-    // Open the overlay tab synchronously so popup blockers allow it; the reset
-    // reaches it over the WebSocket a moment later.
-    window.open(location.origin + "/", "bio-overlay-overlay");
     try {
       const res = await fetch("/api/new-session", { method: "POST" });
       if (!res.ok) throw new Error(await res.text());
-      setStatus("New session started — overlay opened in a new tab.", "ok");
+      // The preview resets over the WebSocket; the clock confirms it too.
+      setStatus("New session started.", "ok");
     } catch (err) {
       setStatus("Could not start a new session: " + err.message, "err");
     }
@@ -264,6 +296,10 @@
   document.getElementById("save").addEventListener("click", save);
   document.getElementById("new-session").addEventListener("click", newSession);
   document.getElementById("quit").addEventListener("click", quit);
+
+  window.addEventListener("resize", sizePreview);
+  sizePreview();
+  setInterval(updateSessionClock, 30000); // keep the duration fresh
 
   setupOverlayLinks();
   connectLive();
