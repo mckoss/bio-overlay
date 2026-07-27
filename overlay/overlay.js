@@ -57,7 +57,8 @@
     const live = el("div", "live");
     const bpmEl = el("div", "bpm", "--");
     const unitEl = el("div", "unit", "BPM");
-    live.append(bpmEl, unitEl);
+    const zoneEl = el("div", "zone");
+    live.append(bpmEl, unitEl, zoneEl);
 
     const spark = el("div", "spark");
     const sparkEl = el("div", "spark-svg");
@@ -76,7 +77,7 @@
     root.append(nameEl, metrics, sessionEl, respEl, badgeEl);
     panelsEl.appendChild(root);
 
-    panel = { root, nameEl, bpmEl, sparkEl, maxEl, minEl, sessionEl, respEl, badgeEl };
+    panel = { root, nameEl, bpmEl, zoneEl, sparkEl, maxEl, minEl, sessionEl, respEl, badgeEl };
     panels.set(participantId, panel);
     return panel;
   }
@@ -104,11 +105,31 @@
       panel.bpmEl.textContent = "--";
     }
 
+    renderZoneChip(panel, live ? zoneFor(p.bpm, p.zones) : null);
     // History comes from the server, so a reload restores it immediately.
-    renderSparkline(panel, p.samples || []);
+    renderSparkline(panel, p.samples || [], p.zones);
     renderSession(panel, p.session);
     renderRespiration(panel, p.respiration);
     panel.badgeEl.textContent = "";
+  }
+
+  // Intensity zones (from the server: Tanaka HRmax + band divisors).
+  const ZONE_NAMES = ["rest", "light", "medium", "heavy", "over"];
+  const ZONE_LABELS = { rest: "REST", light: "LIGHT", medium: "MEDIUM", heavy: "HEAVY", over: "OVER MAX" };
+
+  function zoneFor(bpm, zones) {
+    if (bpm == null || !zones || !Array.isArray(zones.divisors)) return null;
+    const d = zones.divisors; // [rest|light, light|medium, medium|heavy, heavy|over]
+    if (bpm < d[0]) return "rest";
+    if (bpm < d[1]) return "light";
+    if (bpm < d[2]) return "medium";
+    if (bpm <= d[3]) return "heavy";
+    return "over";
+  }
+
+  function renderZoneChip(panel, zone) {
+    panel.zoneEl.textContent = zone ? ZONE_LABELS[zone] : "";
+    panel.zoneEl.className = "zone" + (zone ? " " + zone : "");
   }
 
   // Experimental respiration is hidden below this confidence to avoid showing
@@ -126,7 +147,38 @@
       `<span class="est">est</span>`;
   }
 
-  function renderSparkline(panel, samples) {
+  // With zones, the y-axis anchors to the participant's heart-rate range
+  // (~45%..105% of HRmax) so the intensity bands are stable, meaningful
+  // gridlines; without zones it auto-scales to the window as before.
+  function sparklineScale(dataLo, dataHi, zones) {
+    if (!zones || !Array.isArray(zones.divisors)) return [dataLo, dataHi];
+    return [
+      Math.min(dataLo, Math.round(zones.maxHr * 0.45)),
+      Math.max(dataHi, Math.round(zones.maxHr * 1.05)),
+    ];
+  }
+
+  // Translucent band rects + hairlines at the divisors, behind the line.
+  function zoneBandsSvg(zones, lo, hi, y) {
+    if (!zones || !Array.isArray(zones.divisors)) return "";
+    const edges = [lo, ...zones.divisors, hi];
+    let svg = "";
+    for (let i = 0; i < ZONE_NAMES.length; i++) {
+      const top = y(Math.min(edges[i + 1], hi));
+      const bottom = y(Math.max(edges[i], lo));
+      if (bottom <= top) continue; // band entirely outside the visible range
+      svg += `<rect class="band ${ZONE_NAMES[i]}" x="0" y="${top.toFixed(1)}" ` +
+        `width="${SPARK_W}" height="${(bottom - top).toFixed(1)}"/>`;
+    }
+    for (const d of zones.divisors) {
+      if (d <= lo || d >= hi) continue;
+      svg += `<line class="band-line" x1="0" y1="${y(d).toFixed(1)}" ` +
+        `x2="${SPARK_W}" y2="${y(d).toFixed(1)}"/>`;
+    }
+    return svg;
+  }
+
+  function renderSparkline(panel, samples, zones) {
     // Only draw samples within the window; older points (e.g. frozen during a
     // disconnect) are clipped relative to the client's clock.
     const cutoff = Date.now() - WINDOW_MS;
@@ -139,15 +191,17 @@
       return;
     }
 
-    let lo = Infinity;
-    let hi = -Infinity;
+    let dataLo = Infinity;
+    let dataHi = -Infinity;
     for (const [, bpm] of s) {
-      if (bpm < lo) lo = bpm;
-      if (bpm > hi) hi = bpm;
+      if (bpm < dataLo) dataLo = bpm;
+      if (bpm > dataHi) dataHi = bpm;
     }
-    panel.maxEl.textContent = String(hi);
-    panel.minEl.textContent = String(lo);
+    // The bounds column still reports the window's own min/max.
+    panel.maxEl.textContent = String(dataHi);
+    panel.minEl.textContent = String(dataLo);
 
+    const [lo, hi] = sparklineScale(dataLo, dataHi, zones);
     const span = hi - lo || 1; // avoid divide-by-zero on a flat line
     const innerH = SPARK_H - 2 * SPARK_PAD_Y;
     const x = (t) => ((t - cutoff) / WINDOW_MS) * SPARK_W;
@@ -155,14 +209,18 @@
 
     const pts = s.map(([t, bpm]) => `${x(t).toFixed(1)},${y(bpm).toFixed(1)}`);
     const [lastT, lastBpm] = s[s.length - 1];
-    const area =
-      `M ${x(s[0][0]).toFixed(1)},${SPARK_H} ` +
-      pts.map((pt) => `L ${pt}`).join(" ") +
-      ` L ${x(lastT).toFixed(1)},${SPARK_H} Z`;
+    const bands = zoneBandsSvg(zones, lo, hi, y);
+    // With zone bands, the area fill just muddies the band colors — skip it.
+    const area = bands
+      ? ""
+      : `<path class="spark-area" d="M ${x(s[0][0]).toFixed(1)},${SPARK_H} ` +
+        pts.map((pt) => `L ${pt}`).join(" ") +
+        ` L ${x(lastT).toFixed(1)},${SPARK_H} Z"/>`;
 
     panel.sparkEl.innerHTML =
       `<svg viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none">` +
-      `<path class="spark-area" d="${area}"/>` +
+      bands +
+      area +
       `<polyline class="spark-line" points="${pts.join(" ")}"/>` +
       `<circle class="spark-dot" cx="${x(lastT).toFixed(1)}" cy="${y(lastBpm).toFixed(1)}" r="3.5"/>` +
       `</svg>`;

@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
 from .respiration import estimate_respiration
+from .zones import zones_for
 
 # If no fresh measurement arrives within this many seconds, the participant is
 # marked stale even if the BLE link still claims to be connected.
@@ -45,6 +46,9 @@ class ParticipantState:
     participant_id: str
     display_name: str
     device_id: str | None = None
+    # Workout-intensity zones (Tanaka HRmax from birth year, or explicit max).
+    birth_year: int | None = None
+    max_hr: int | None = None
     bpm: int | None = None
     rr_intervals_ms: list[float] = field(default_factory=list)
     connected: bool = False
@@ -108,6 +112,8 @@ class ParticipantState:
             "active": self.active,
             "sensorContact": self.sensor_contact,
             "updatedAt": self.updated_at,
+            # Intensity zones, or null when no birth year / max HR is configured.
+            "zones": zones_for(self.birth_year, self.max_hr),
             # Full session history so the overlay is a stateless renderer.
             "samples": [[t, b] for (t, b) in self.samples],
             "session": {
@@ -160,7 +166,12 @@ class TelemetryHub:
     # -- registration -----------------------------------------------------
 
     def register_participant(
-        self, participant_id: str, display_name: str, device_id: str | None = None
+        self,
+        participant_id: str,
+        display_name: str,
+        device_id: str | None = None,
+        birth_year: int | None = None,
+        max_hr: int | None = None,
     ) -> None:
         self._participants.setdefault(
             participant_id,
@@ -168,6 +179,8 @@ class TelemetryHub:
                 participant_id=participant_id,
                 display_name=display_name,
                 device_id=device_id,
+                birth_year=birth_year,
+                max_hr=max_hr,
             ),
         )
 
@@ -186,10 +199,14 @@ class TelemetryHub:
                     participant_id=p.id,
                     display_name=p.display_name,
                     device_id=p.device_id,
+                    birth_year=getattr(p, "birth_year", None),
+                    max_hr=getattr(p, "max_hr", None),
                 )
             else:
                 state.display_name = p.display_name
                 state.device_id = p.device_id
+                state.birth_year = getattr(p, "birth_year", None)
+                state.max_hr = getattr(p, "max_hr", None)
             ordered[p.id] = state
         self._participants = ordered
         await self._broadcast()

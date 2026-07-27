@@ -50,6 +50,10 @@ class ParticipantConfig:
     # strap). Only used when device_id is unset.
     address: str | None = None
     name_prefix: str = DEFAULT_NAME_PREFIX
+    # For workout-intensity zones: birth year feeds the Tanaka HRmax formula;
+    # a configured max_hr (e.g. a tested maximum) overrides the formula.
+    birth_year: int | None = None
+    max_hr: int | None = None
 
     def to_dict(self) -> dict:
         out = {
@@ -57,6 +61,8 @@ class ParticipantConfig:
             "displayName": self.display_name,
             "deviceId": self.device_id,
             "namePrefix": self.name_prefix,
+            "birthYear": self.birth_year,
+            "maxHr": self.max_hr,
         }
         if self.address:
             out["address"] = self.address
@@ -72,6 +78,9 @@ class AppConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> "AppConfig":
+        def opt_int(value) -> int | None:
+            return int(value) if value not in (None, "") else None
+
         participants = [
             ParticipantConfig(
                 id=p["id"],
@@ -79,6 +88,8 @@ class AppConfig:
                 device_id=p.get("deviceId"),
                 address=p.get("address"),
                 name_prefix=p.get("namePrefix", DEFAULT_NAME_PREFIX),
+                birth_year=opt_int(p.get("birthYear")),
+                max_hr=opt_int(p.get("maxHr")),
             )
             for p in data.get("participants", [])
         ]

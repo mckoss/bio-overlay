@@ -32,6 +32,15 @@ def test_snapshot_has_both_participants(hub):
     assert snap["participants"][0]["connected"] is False
 
 
+def test_snapshot_includes_zones_when_configured():
+    h = TelemetryHub()
+    h.register_participant("p1", "One", max_hr=160)
+    h.register_participant("p2", "Two")
+    states = {p["participantId"]: p for p in h.snapshot()["participants"]}
+    assert states["p1"]["zones"] == {"maxHr": 160, "divisors": [80, 104, 128, 160]}
+    assert states["p2"]["zones"] is None
+
+
 def test_participants_start_inactive(hub):
     # Unconfigured/untouched participants are inactive so the overlay hides them.
     for p in hub.snapshot()["participants"]:

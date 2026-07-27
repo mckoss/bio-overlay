@@ -77,7 +77,13 @@ def _build_hub(config: AppConfig, *, enable_respiration: bool = False) -> Teleme
         enable_respiration=enable_respiration,
     )
     for p in config.participants:
-        hub.register_participant(p.id, p.display_name, device_id=p.device_id)
+        hub.register_participant(
+            p.id,
+            p.display_name,
+            device_id=p.device_id,
+            birth_year=p.birth_year,
+            max_hr=p.max_hr,
+        )
     return hub
 
 

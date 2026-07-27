@@ -183,6 +183,37 @@ h2 {
   opacity: 0.14;
 }
 
+/* Intensity-zone bands behind the chart (colors match the live overlay). */
+.band {
+  fill-opacity: 0.14;
+}
+
+.band.rest {
+  fill: #7a8699;
+}
+
+.band.light {
+  fill: #2ecc71;
+}
+
+.band.medium {
+  fill: #ffb020;
+}
+
+.band.heavy {
+  fill: #ff7a45;
+}
+
+.band.over {
+  fill: #ff2e33;
+}
+
+.band-line {
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
 .p-spark .y-max,
 .p-spark .y-min {
   position: absolute;

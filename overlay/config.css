@@ -88,10 +88,10 @@ h2 {
   font-size: 0.88rem;
 }
 
-/* Participant rows */
+/* Participant rows: name/id/device plus the narrow zone fields (Born, Max HR). */
 .participant {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: 1.3fr 1.3fr 1.1fr 4.2rem 4.2rem auto;
   gap: 0.6rem;
   align-items: end;
   padding: 0.7rem;

@@ -6,14 +6,22 @@ from bio_overlay.config import AppConfig, ParticipantConfig
 def test_to_dict_roundtrip():
     cfg = AppConfig(
         participants=[
-            ParticipantConfig(id="mike-koss", display_name="Mike", device_id="16CD9E3C"),
-            ParticipantConfig(id="debbie-koss", display_name="Debbie", device_id="16CDAA3B"),
+            ParticipantConfig(
+                id="mike-koss", display_name="Mike", device_id="16CD9E3C", birth_year=1960
+            ),
+            ParticipantConfig(
+                id="debbie-koss", display_name="Debbie", device_id="16CDAA3B", max_hr=165
+            ),
         ],
         port=8085,
     )
     again = AppConfig.from_dict(cfg.to_dict())
     assert [p.id for p in again.participants] == ["mike-koss", "debbie-koss"]
     assert again.participants[0].device_id == "16CD9E3C"
+    assert again.participants[0].birth_year == 1960
+    assert again.participants[0].max_hr is None
+    assert again.participants[1].birth_year is None
+    assert again.participants[1].max_hr == 165
     assert again.port == 8085
 
 
