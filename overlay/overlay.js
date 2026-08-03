@@ -247,7 +247,11 @@
       bands +
       area +
       `<polyline class="spark-line" points="${pts.join(" ")}"/>` +
-      `<circle class="spark-dot" cx="${x(lastT).toFixed(1)}" cy="${y(lastBpm).toFixed(1)}" r="3.5"/>` +
+      // The live-head dot is a zero-length round-capped stroke: with
+      // non-scaling-stroke it stays a screen-space circle even though the
+      // viewBox is stretched non-uniformly (a <circle> would render as an
+      // ellipse).
+      `<path class="spark-dot" d="M ${x(lastT).toFixed(1)},${y(lastBpm).toFixed(1)} h 0.01"/>` +
       `</svg>`;
   }
 

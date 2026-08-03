@@ -284,15 +284,21 @@ body {
   opacity: 0.16;
 }
 
+/* Live-head marker: round cap on a zero-length path + non-scaling stroke =
+   a fixed-size screen-space circle despite the stretched viewBox. */
 .spark-dot {
-  fill: var(--accent);
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 7;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
 
 /* Axis labels, one per gridline: percent of max HR with zones (50%..100%),
    window min/max BPM without. */
 .panel .spark-bounds {
   position: relative;
-  font-size: 0.75rem;
+  font-size: 0.6rem;
   font-weight: 600;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
