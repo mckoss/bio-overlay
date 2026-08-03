@@ -17,15 +17,15 @@ def test_implausible_birth_year_rejected():
     assert max_heart_rate(1899, year=2026) is None
 
 
-def test_zones_divisors_at_50_65_80_100_percent():
+def test_zones_divisors_at_standard_five_zone_percentages():
     z = zones_for(None, max_hr=160)
-    assert z == {"maxHr": 160, "divisors": [80, 104, 128, 160]}
+    assert z == {"maxHr": 160, "divisors": [80, 96, 112, 128, 144, 160]}
 
 
 def test_zones_from_birth_year():
     z = zones_for(1960, year=2026)  # HRmax 162
     assert z["maxHr"] == 162
-    assert z["divisors"] == [81, 105, 130, 162]
+    assert z["divisors"] == [81, 97, 113, 130, 146, 162]
 
 
 def test_explicit_max_overrides_formula():

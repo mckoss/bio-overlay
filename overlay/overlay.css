@@ -114,12 +114,15 @@ body {
   color: var(--muted);
 }
 
-/* Intensity-zone colors (shared by the BPM chip and the sparkline bands). */
+/* Intensity-zone colors (shared by the BPM chip and the sparkline bands).
+   Standard five-zone palette: Z1 blue through Z5 red, gray for rest. */
 :root {
   --zone-rest: #7a8699;
-  --zone-light: #2ecc71;
-  --zone-medium: #ffb020;
-  --zone-heavy: #ff7a45;
+  --zone-z1: #4aa3ff;
+  --zone-z2: #2ecc71;
+  --zone-z3: #ffb020;
+  --zone-z4: #ff7a45;
+  --zone-z5: #ff2e33;
   --zone-over: #ff2e33;
 }
 
@@ -128,16 +131,24 @@ body {
   color: var(--zone-rest);
 }
 
-.panel .bpm.light {
-  color: var(--zone-light);
+.panel .bpm.z1 {
+  color: var(--zone-z1);
 }
 
-.panel .bpm.medium {
-  color: var(--zone-medium);
+.panel .bpm.z2 {
+  color: var(--zone-z2);
 }
 
-.panel .bpm.heavy {
-  color: var(--zone-heavy);
+.panel .bpm.z3 {
+  color: var(--zone-z3);
+}
+
+.panel .bpm.z4 {
+  color: var(--zone-z4);
+}
+
+.panel .bpm.z5 {
+  color: var(--zone-z5);
 }
 
 .panel .bpm.over {
@@ -145,7 +156,7 @@ body {
   animation: over-pulse 0.8s ease-in-out infinite;
 }
 
-/* Zone chip next to the live BPM: REST / LIGHT / MEDIUM / HEAVY / OVER MAX. */
+/* Zone chip next to the live BPM: REST / ZONE 1..ZONE 5 / OVER MAX. */
 .panel .zone {
   align-self: center;
   margin-left: 0.4rem;
@@ -166,17 +177,25 @@ body {
   background: var(--zone-rest);
 }
 
-.panel .zone.light {
-  background: var(--zone-light);
+.panel .zone.z1 {
+  background: var(--zone-z1);
 }
 
-.panel .zone.medium {
-  background: var(--zone-medium);
+.panel .zone.z2 {
+  background: var(--zone-z2);
+}
+
+.panel .zone.z3 {
+  background: var(--zone-z3);
   color: #201500;
 }
 
-.panel .zone.heavy {
-  background: var(--zone-heavy);
+.panel .zone.z4 {
+  background: var(--zone-z4);
+}
+
+.panel .zone.z5 {
+  background: var(--zone-z5);
 }
 
 .panel .zone.over {
@@ -203,16 +222,24 @@ body {
   fill: var(--zone-rest);
 }
 
-.band.light {
-  fill: var(--zone-light);
+.band.z1 {
+  fill: var(--zone-z1);
 }
 
-.band.medium {
-  fill: var(--zone-medium);
+.band.z2 {
+  fill: var(--zone-z2);
 }
 
-.band.heavy {
-  fill: var(--zone-heavy);
+.band.z3 {
+  fill: var(--zone-z3);
+}
+
+.band.z4 {
+  fill: var(--zone-z4);
+}
+
+.band.z5 {
+  fill: var(--zone-z5);
 }
 
 .band.over {

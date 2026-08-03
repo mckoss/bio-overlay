@@ -113,17 +113,26 @@
   }
 
   // Intensity zones (from the server: Tanaka HRmax + band divisors).
-  const ZONE_NAMES = ["rest", "light", "medium", "heavy", "over"];
-  const ZONE_LABELS = { rest: "REST", light: "LIGHT", medium: "MEDIUM", heavy: "HEAVY", over: "OVER MAX" };
+  const ZONE_NAMES = ["rest", "z1", "z2", "z3", "z4", "z5", "over"];
+  const ZONE_LABELS = {
+    rest: "REST",
+    z1: "ZONE 1",
+    z2: "ZONE 2",
+    z3: "ZONE 3",
+    z4: "ZONE 4",
+    z5: "ZONE 5",
+    over: "OVER MAX",
+  };
 
   function zoneFor(bpm, zones) {
     if (bpm == null || !zones || !Array.isArray(zones.divisors)) return null;
-    const d = zones.divisors; // [rest|light, light|medium, medium|heavy, heavy|over]
-    if (bpm < d[0]) return "rest";
-    if (bpm < d[1]) return "light";
-    if (bpm < d[2]) return "medium";
-    if (bpm <= d[3]) return "heavy";
-    return "over";
+    // divisors: [rest|z1, z1|z2, z2|z3, z3|z4, z4|z5, z5|over] — the last one
+    // is HRmax itself (inclusive).
+    const d = zones.divisors;
+    for (let i = 0; i < d.length - 1; i++) {
+      if (bpm < d[i]) return ZONE_NAMES[i];
+    }
+    return bpm <= d[d.length - 1] ? ZONE_NAMES[d.length - 1] : "over";
   }
 
   function renderZoneChip(panel, zone) {
