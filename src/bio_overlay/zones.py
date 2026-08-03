@@ -55,4 +55,23 @@ def zones_for(
     }
 
 
-__all__ = ["max_heart_rate", "zones_for", "DIVISOR_FRACTIONS"]
+# Bucket count for zone-time accounting: rest + Z1..Z5 + over max.
+N_ZONE_BUCKETS = len(DIVISOR_FRACTIONS) + 1
+
+
+def zone_index(bpm: int, divisors: list[int]) -> int:
+    """Bucket index for a reading: 0 = rest, 1..5 = Z1..Z5, 6 = over max.
+
+    Boundaries are inclusive upward (a reading exactly at a divisor belongs to
+    the zone above it), except HRmax itself which still counts as Z5 — matching
+    the client's zoneFor().
+    """
+    if bpm > divisors[-1]:
+        return len(divisors)
+    for i, d in enumerate(divisors):
+        if bpm < d:
+            return i
+    return len(divisors) - 1  # bpm == divisors[-1] (HRmax) -> Z5
+
+
+__all__ = ["max_heart_rate", "zones_for", "zone_index", "DIVISOR_FRACTIONS", "N_ZONE_BUCKETS"]

@@ -1,6 +1,6 @@
 """Tests for Tanaka HRmax and workout-intensity zone computation."""
 
-from bio_overlay.zones import max_heart_rate, zones_for
+from bio_overlay.zones import max_heart_rate, zone_index, zones_for
 
 
 def test_tanaka_max_heart_rate():
@@ -35,3 +35,15 @@ def test_explicit_max_overrides_formula():
 def test_no_config_no_zones():
     assert zones_for(None) is None
     assert zones_for(None, max_hr=0) is None
+
+
+def test_zone_index_buckets():
+    d = zones_for(None, max_hr=160)["divisors"]  # [80, 96, 112, 128, 144, 160]
+    assert zone_index(70, d) == 0  # rest
+    assert zone_index(80, d) == 1  # boundary is inclusive upward
+    assert zone_index(95, d) == 1
+    assert zone_index(96, d) == 2
+    assert zone_index(130, d) == 4
+    assert zone_index(159, d) == 5
+    assert zone_index(160, d) == 5  # HRmax itself is still Z5
+    assert zone_index(161, d) == 6  # over max

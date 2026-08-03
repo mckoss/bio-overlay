@@ -19,6 +19,8 @@
 
   // Sparkline window and geometry (viewBox units; CSS sizes the element).
   const WINDOW_MS = 5 * 60 * 1000;
+  // The zone-time bar's full width represents at least this much time.
+  const ZONEBAR_MIN_SCALE_MS = 60 * 60 * 1000;
   const SPARK_W = 192;
   const SPARK_H = 48;
   const SPARK_PAD_Y = 5;
@@ -68,14 +70,16 @@
     const sessionEl = el("div", "session");
     const respEl = el("div", "resp");
     // The zone chip shares the bottom row with the "no signal" badge: the chip
-    // only shows with a live signal, the badge only without one.
+    // only shows with a live signal, the badge only without one. The zone-time
+    // bar sits in the right half of that same row.
     const zoneEl = el("div", "zone");
+    const zoneBarEl = el("div", "zonebar");
     const badgeEl = el("div", "badge");
 
-    root.append(nameEl, live, spark, sessionEl, respEl, zoneEl, badgeEl);
+    root.append(nameEl, live, spark, sessionEl, respEl, zoneEl, zoneBarEl, badgeEl);
     panelsEl.appendChild(root);
 
-    panel = { root, nameEl, bpmEl, zoneEl, sparkEl, boundsEl, sessionEl, respEl, badgeEl };
+    panel = { root, nameEl, bpmEl, zoneEl, zoneBarEl, sparkEl, boundsEl, sessionEl, respEl, badgeEl };
     panels.set(participantId, panel);
     return panel;
   }
@@ -107,6 +111,7 @@
     const zone = live ? zoneFor(p.bpm, p.zones) : null;
     panel.bpmEl.className = "bpm" + (zone ? " " + zone : "");
     renderZoneChip(panel, zone);
+    renderZoneBar(panel, p.zoneTimesMs);
     // History comes from the server, so a reload restores it immediately.
     renderSparkline(panel, p.samples || [], p.zones);
     renderSession(panel, p.session);
@@ -140,6 +145,22 @@
   function renderZoneChip(panel, zone) {
     panel.zoneEl.textContent = zone ? ZONE_LABELS[zone] : "";
     panel.zoneEl.className = "zone" + (zone ? " " + zone : "");
+  }
+
+  // Stacked bar of session time per zone (server-accumulated). Full track
+  // width = max(1 hour, session duration), so the colored portion grows as
+  // the workout progresses.
+  function renderZoneBar(panel, timesMs) {
+    if (!timesMs || !sessionStartedAt || !timesMs.some((t) => t > 0)) {
+      panel.zoneBarEl.innerHTML = "";
+      return;
+    }
+    const scaleMs = Math.max(ZONEBAR_MIN_SCALE_MS, Date.now() - sessionStartedAt);
+    panel.zoneBarEl.innerHTML = timesMs
+      .map((t, i) => ({ t, name: ZONE_NAMES[i] }))
+      .filter((s) => s.t > 0)
+      .map((s) => `<span class="seg ${s.name}" style="width:${((s.t / scaleMs) * 100).toFixed(2)}%"></span>`)
+      .join("");
   }
 
   // Experimental respiration is hidden below this confidence to avoid showing
@@ -268,6 +289,10 @@
   }
 
   function render(state) {
+    // Parse the session clock first — the zone-time bar's scale needs it.
+    // Null when no session is open (e.g. after an idle auto-close).
+    const started = state.sessionStartedAt ? new Date(state.sessionStartedAt) : null;
+    sessionStartedAt = started && !isNaN(started) ? started : null;
     const seen = new Set();
     for (const p of state.participants || []) {
       // Only show participants a source has activated; an unconfigured (unpaired)
@@ -283,9 +308,6 @@
         panels.delete(id);
       }
     }
-    // Null when no session is open (e.g. after an idle auto-close).
-    const started = state.sessionStartedAt ? new Date(state.sessionStartedAt) : null;
-    sessionStartedAt = started && !isNaN(started) ? started : null;
     // Only show the clock alongside panels — an idle overlay stays blank.
     renderSessionClock(seen.size > 0);
   }
