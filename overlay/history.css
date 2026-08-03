@@ -192,16 +192,24 @@ h2 {
   fill: #7a8699;
 }
 
-.band.light {
+.band.z1 {
+  fill: #4aa3ff;
+}
+
+.band.z2 {
   fill: #2ecc71;
 }
 
-.band.medium {
+.band.z3 {
   fill: #ffb020;
 }
 
-.band.heavy {
+.band.z4 {
   fill: #ff7a45;
+}
+
+.band.z5 {
+  fill: #ff2e33;
 }
 
 .band.over {

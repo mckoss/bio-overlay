@@ -112,7 +112,7 @@
     }
   }
 
-  const ZONE_NAMES = ["rest", "light", "medium", "heavy", "over"];
+  const ZONE_NAMES = ["rest", "z1", "z2", "z3", "z4", "z5", "over"];
 
   // Translucent intensity bands + hairlines at the divisors (when the current
   // config knows the participant's HR range).

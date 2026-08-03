@@ -37,7 +37,7 @@ def test_snapshot_includes_zones_when_configured():
     h.register_participant("p1", "One", max_hr=160)
     h.register_participant("p2", "Two")
     states = {p["participantId"]: p for p in h.snapshot()["participants"]}
-    assert states["p1"]["zones"] == {"maxHr": 160, "divisors": [80, 104, 128, 160]}
+    assert states["p1"]["zones"] == {"maxHr": 160, "divisors": [80, 96, 112, 128, 144, 160]}
     assert states["p2"]["zones"] is None
 
 

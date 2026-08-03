@@ -172,7 +172,7 @@ edited.
 | `participants[].deviceId` | **Preferred binding.** The Polar ID printed on the strap (e.g. `16CD9E3C`), also shown by `scan`. Identifies the physical sensor and is portable across Macs. |
 | `participants[].address` | Optional fallback: the macOS CoreBluetooth UUID. Mac-specific, not printed on the strap; only used if `deviceId` is unset. |
 | `participants[].namePrefix` | Advertised-name prefix to match (default `Polar H10`). |
-| `participants[].birthYear` | Optional. Enables workout-intensity zones (REST / LIGHT / MEDIUM / HEAVY / OVER MAX) on the overlay, using the Tanaka max-heart-rate formula (208 − 0.7 × age). Zone divisors sit at 50 / 65 / 80 / 100 % of HRmax. |
+| `participants[].birthYear` | Optional. Enables workout-intensity zones (REST / ZONE 1–ZONE 5 / OVER MAX) on the overlay, using the Tanaka max-heart-rate formula (208 − 0.7 × age). Zones follow the standard five-zone model: divisors at 50 / 60 / 70 / 80 / 90 / 100 % of HRmax. |
 | `participants[].maxHr` | Optional. A known (tested) maximum heart rate; overrides the Tanaka formula for the zones. |
 
 Strap resolution order: `deviceId` → `address` → first strap whose advertised
