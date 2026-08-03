@@ -74,12 +74,16 @@
     // bar sits in the right half of that same row.
     const zoneEl = el("div", "zone");
     const zoneBarEl = el("div", "zonebar");
+    const zoneWarnEl = el("div", "zone-warn");
     const badgeEl = el("div", "badge");
 
-    root.append(nameEl, live, spark, sessionEl, respEl, zoneEl, zoneBarEl, badgeEl);
+    root.append(nameEl, live, spark, sessionEl, respEl, zoneEl, zoneBarEl, zoneWarnEl, badgeEl);
     panelsEl.appendChild(root);
 
-    panel = { root, nameEl, bpmEl, zoneEl, zoneBarEl, sparkEl, boundsEl, sessionEl, respEl, badgeEl };
+    panel = {
+      root, nameEl, bpmEl, zoneEl, zoneBarEl, zoneWarnEl,
+      sparkEl, boundsEl, sessionEl, respEl, badgeEl,
+    };
     panels.set(participantId, panel);
     return panel;
   }
@@ -112,6 +116,10 @@
     panel.bpmEl.className = "bpm" + (zone ? " " + zone : "");
     renderZoneChip(panel, zone);
     renderZoneBar(panel, p.zoneTimesMs);
+    // Warn when zones are running on the default assumed age (no birth year
+    // or max HR configured for this participant).
+    panel.zoneWarnEl.textContent =
+      p.zones && p.zones.assumedAge ? `zones assume age ${p.zones.assumedAge}` : "";
     // History comes from the server, so a reload restores it immediately.
     renderSparkline(panel, p.samples || [], p.zones);
     renderSession(panel, p.session);

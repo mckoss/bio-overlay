@@ -94,8 +94,6 @@ class ParticipantState:
         any bucket, so the bar only shows time actually tracked.
         """
         zones = zones_for(self.birth_year, self.max_hr)
-        if zones is None:
-            return
         if self.zone_last_ms is not None:
             dt = at_ms - self.zone_last_ms
             if 0 < dt <= max_gap_ms:
@@ -144,10 +142,11 @@ class ParticipantState:
             "active": self.active,
             "sensorContact": self.sensor_contact,
             "updatedAt": self.updated_at,
-            # Intensity zones, or null when no birth year / max HR is configured.
+            # Intensity zones — assumes DEFAULT_AGE (flagged via "assumedAge")
+            # when no birth year / max HR is configured.
             "zones": zones,
-            # Whole-session ms per bucket (rest, Z1..Z5, over), or null.
-            "zoneTimesMs": list(self.zone_ms) if zones else None,
+            # Whole-session ms per bucket (rest, Z1..Z5, over).
+            "zoneTimesMs": list(self.zone_ms),
             # Full session history so the overlay is a stateless renderer.
             "samples": [[t, b] for (t, b) in self.samples],
             "session": {

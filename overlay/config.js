@@ -38,14 +38,29 @@
     };
     config.participants.forEach((p, i) => {
       const row = el("div", "participant");
+      // Warn (live, as the fields change) when zones will fall back to the
+      // default assumed age because neither Born nor Max HR is set.
+      const warn = el("div", "zone-default-warn");
+      const updateWarn = () => {
+        warn.textContent =
+          p.birthYear == null && p.maxHr == null
+            ? "⚠ No birth year or max HR — intensity zones assume age 65."
+            : "";
+      };
       row.append(
         field("Display name", p.displayName, (v) => (p.displayName = v)),
         field("ID (key)", p.id, (v) => (p.id = v)),
         field("Device ID", p.deviceId, (v) => (p.deviceId = v || null)),
         // Intensity zones: birth year drives the Tanaka HRmax formula; a
         // known (tested) max HR overrides it. Both optional.
-        field("Born", p.birthYear, (v) => (p.birthYear = optInt(v))),
-        field("Max HR", p.maxHr, (v) => (p.maxHr = optInt(v)))
+        field("Born", p.birthYear, (v) => {
+          p.birthYear = optInt(v);
+          updateWarn();
+        }),
+        field("Max HR", p.maxHr, (v) => {
+          p.maxHr = optInt(v);
+          updateWarn();
+        })
       );
       const remove = el("button", "btn-remove", "Remove");
       remove.title = "Remove participant";
@@ -53,7 +68,8 @@
         config.participants.splice(i, 1);
         renderAll();
       });
-      row.append(remove);
+      row.append(remove, warn);
+      updateWarn();
       participantsEl.appendChild(row);
     });
   }
