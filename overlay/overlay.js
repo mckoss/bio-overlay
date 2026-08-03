@@ -182,21 +182,24 @@
   }
 
   // Translucent band rects + hairlines at the divisors, behind the line.
+  // Bands span divisor-to-divisor only (Z1..Z5, i.e. 50%..100% of HRmax) so
+  // each colored stripe lines up exactly with the axis labels; the rest/over
+  // margins beyond the outermost divisors stay uncolored.
   function zoneBandsSvg(zones, lo, hi, y) {
     if (!zones || !Array.isArray(zones.divisors)) return "";
-    const edges = [lo, ...zones.divisors, hi];
+    const d = zones.divisors;
     let svg = "";
-    for (let i = 0; i < ZONE_NAMES.length; i++) {
-      const top = y(Math.min(edges[i + 1], hi));
-      const bottom = y(Math.max(edges[i], lo));
+    for (let i = 0; i + 1 < d.length; i++) {
+      const top = y(Math.min(d[i + 1], hi));
+      const bottom = y(Math.max(d[i], lo));
       if (bottom <= top) continue; // band entirely outside the visible range
-      svg += `<rect class="band ${ZONE_NAMES[i]}" x="0" y="${top.toFixed(1)}" ` +
+      svg += `<rect class="band ${ZONE_NAMES[i + 1]}" x="0" y="${top.toFixed(1)}" ` +
         `width="${SPARK_W}" height="${(bottom - top).toFixed(1)}"/>`;
     }
-    for (const d of zones.divisors) {
-      if (d <= lo || d >= hi) continue;
-      svg += `<line class="band-line" x1="0" y1="${y(d).toFixed(1)}" ` +
-        `x2="${SPARK_W}" y2="${y(d).toFixed(1)}"/>`;
+    for (const div of d) {
+      if (div <= lo || div >= hi) continue;
+      svg += `<line class="band-line" x1="0" y1="${y(div).toFixed(1)}" ` +
+        `x2="${SPARK_W}" y2="${y(div).toFixed(1)}"/>`;
     }
     return svg;
   }

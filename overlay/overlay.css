@@ -221,10 +221,6 @@ body {
   fill-opacity: 0.25;
 }
 
-.band.rest {
-  fill: var(--zone-rest);
-}
-
 .band.z1 {
   fill: var(--zone-z1);
 }
@@ -243,10 +239,6 @@ body {
 
 .band.z5 {
   fill: var(--zone-z5);
-}
-
-.band.over {
-  fill: var(--zone-over);
 }
 
 .band-line {

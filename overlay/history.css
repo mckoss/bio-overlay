@@ -188,10 +188,6 @@ h2 {
   fill-opacity: 0.14;
 }
 
-.band.rest {
-  fill: #7a8699;
-}
-
 .band.z1 {
   fill: #4aa3ff;
 }
@@ -209,10 +205,6 @@ h2 {
 }
 
 .band.z5 {
-  fill: #ff2e33;
-}
-
-.band.over {
   fill: #ff2e33;
 }
 
