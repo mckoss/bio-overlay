@@ -147,20 +147,29 @@
     panel.zoneEl.className = "zone" + (zone ? " " + zone : "");
   }
 
-  // Stacked bar of session time per zone (server-accumulated). Full track
-  // width = max(1 hour, session duration), so the colored portion grows as
-  // the workout progresses.
+  // Stacked bar of session time per zone (server-accumulated), left-aligned
+  // in the right half of the bottom row, with the elapsed minutes at its end.
+  // The bar is scaled against max(1 hour, session duration): it grows to the
+  // right (label riding along) until the 1-hour mark, after which it spans
+  // the available width and only the proportions change. Only zone colors are
+  // drawn — there is no track for the "unused" remainder.
   function renderZoneBar(panel, timesMs) {
     if (!timesMs || !sessionStartedAt || !timesMs.some((t) => t > 0)) {
       panel.zoneBarEl.innerHTML = "";
       return;
     }
-    const scaleMs = Math.max(ZONEBAR_MIN_SCALE_MS, Date.now() - sessionStartedAt);
-    panel.zoneBarEl.innerHTML = timesMs
+    const elapsedMs = Date.now() - sessionStartedAt;
+    const scaleMs = Math.max(ZONEBAR_MIN_SCALE_MS, elapsedMs);
+    const trackedMs = timesMs.reduce((a, b) => a + b, 0);
+    const segs = timesMs
       .map((t, i) => ({ t, name: ZONE_NAMES[i] }))
       .filter((s) => s.t > 0)
-      .map((s) => `<span class="seg ${s.name}" style="width:${((s.t / scaleMs) * 100).toFixed(2)}%"></span>`)
+      .map((s) => `<span class="seg ${s.name}" style="flex-grow:${s.t}"></span>`)
       .join("");
+    const mins = Math.floor(elapsedMs / 60000);
+    panel.zoneBarEl.innerHTML =
+      `<span class="segs" style="width:${((trackedMs / scaleMs) * 100).toFixed(2)}%">${segs}</span>` +
+      `<span class="mins">${mins} min</span>`;
   }
 
   // Experimental respiration is hidden below this confidence to avoid showing

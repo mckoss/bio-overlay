@@ -214,18 +214,23 @@ h2 {
   vector-effect: non-scaling-stroke;
 }
 
-/* Time-in-zone bar + percentage labels under each participant's chart.
-   Full track width = max(1 hour, session duration). */
+/* Time-in-zone bar + percentage labels under each participant's chart. Only
+   zone colors are drawn (no background track); the bar's length = session
+   time relative to max(1 hour, session duration). */
 .p-zonetime {
   margin-top: 0.6rem;
 }
 
 .p-zonetime .zonebar {
   display: flex;
+}
+
+.p-zonetime .segs {
+  display: flex;
   height: 0.55rem;
+  min-width: 0.28rem;
   border-radius: 0.28rem;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.1);
 }
 
 .p-zonetime .seg.rest {

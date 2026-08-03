@@ -206,23 +206,40 @@ body {
   animation: over-pulse 0.8s ease-in-out infinite;
 }
 
-/* Zone-time bar: stacked share of session time per zone, right half of the
-   bottom row (opposite the zone chip). Full track width = max(1 hour,
-   session duration); the colored portion grows as the workout progresses. */
+/* Zone-time bar: stacked share of session time per zone, left-aligned in the
+   right half of the bottom row (opposite the zone chip), with the elapsed
+   minutes riding at its end. Only zone colors are drawn — no background
+   track. Scaled against max(1 hour, session duration): the bar (and label)
+   grow rightward until the 1-hour mark, then only proportions change. */
 .panel .zonebar {
   grid-area: badge;
   justify-self: end;
   align-self: center;
   width: 50%;
-  height: 0.5rem;
   display: flex;
-  border-radius: 0.25rem;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.14);
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .panel .zonebar:empty {
   display: none;
+}
+
+.panel .zonebar .segs {
+  display: flex;
+  height: 0.5rem;
+  min-width: 0.25rem; /* a just-started session still shows a nub of color */
+  border-radius: 0.25rem;
+  overflow: hidden;
+}
+
+.panel .zonebar .mins {
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .panel .zonebar .seg.rest {

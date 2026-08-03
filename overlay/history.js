@@ -150,12 +150,17 @@
     const scaleS = Math.max(ZONEBAR_MIN_SCALE_S, points[points.length - 1][0] - points[0][0]);
     const wrap = el("div", "p-zonetime");
     const bar = el("div", "zonebar");
+    // Only zone colors are drawn (no background track): a wrapper sized to
+    // tracked-time/scale holds the segments, which split it proportionally.
+    const segs = el("span", "segs");
+    segs.style.width = `${((total / scaleS) * 100).toFixed(2)}%`;
+    bar.appendChild(segs);
     const labels = el("div", "zonetime-labels");
     for (let i = 0; i < times.length; i++) {
       if (!times[i]) continue;
       const seg = el("span", `seg ${ZONE_NAMES[i]}`);
-      seg.style.width = `${((times[i] / scaleS) * 100).toFixed(2)}%`;
-      bar.appendChild(seg);
+      seg.style.flexGrow = times[i];
+      segs.appendChild(seg);
       const pct = Math.round((times[i] / total) * 100);
       labels.appendChild(el("span", `zl ${ZONE_NAMES[i]}`, `${ZONE_TIME_LABELS[i]} ${pct}%`));
     }
