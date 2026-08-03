@@ -108,11 +108,60 @@
       card.append(stats);
 
       card.append(sparkline(p.points || [], p.zones));
+      const zt = zoneTimeBar(p.points || [], p.zones);
+      if (zt) card.append(zt);
       detailEl.appendChild(card);
     }
   }
 
   const ZONE_NAMES = ["rest", "z1", "z2", "z3", "z4", "z5", "over"];
+  const ZONE_TIME_LABELS = ["Rest", "Z1", "Z2", "Z3", "Z4", "Z5", "Max"];
+  // Gaps between samples longer than this are dropouts — not attributed to
+  // any zone. The history file records one sample per ~5s, so this must
+  // comfortably exceed that cadence (matches the server's ZONE_MAX_GAP_S).
+  const ZONE_MAX_GAP_S = 15;
+  // The bar's full track width represents at least this much time.
+  const ZONEBAR_MIN_SCALE_S = 60 * 60;
+
+  // Bucket for a reading: 0 = rest, 1..5 = Z1..Z5, 6 = over max (mirrors the
+  // overlay's zoneFor and the server's zone_index).
+  function zoneIndex(bpm, d) {
+    if (bpm > d[d.length - 1]) return d.length;
+    for (let i = 0; i < d.length; i++) {
+      if (bpm < d[i]) return i;
+    }
+    return d.length - 1; // bpm == HRmax -> Z5
+  }
+
+  // Stacked bar of time per zone + percentage labels. Track width =
+  // max(1 hour, session duration), so sessions are comparable by length.
+  function zoneTimeBar(points, zones) {
+    if (!zones || !Array.isArray(zones.divisors) || points.length < 2) return null;
+    const times = new Array(ZONE_NAMES.length).fill(0);
+    let total = 0;
+    for (let i = 1; i < points.length; i++) {
+      const dt = points[i][0] - points[i - 1][0];
+      if (dt <= 0 || dt > ZONE_MAX_GAP_S) continue;
+      times[zoneIndex(points[i][1], zones.divisors)] += dt;
+      total += dt;
+    }
+    if (!total) return null;
+
+    const scaleS = Math.max(ZONEBAR_MIN_SCALE_S, points[points.length - 1][0] - points[0][0]);
+    const wrap = el("div", "p-zonetime");
+    const bar = el("div", "zonebar");
+    const labels = el("div", "zonetime-labels");
+    for (let i = 0; i < times.length; i++) {
+      if (!times[i]) continue;
+      const seg = el("span", `seg ${ZONE_NAMES[i]}`);
+      seg.style.width = `${((times[i] / scaleS) * 100).toFixed(2)}%`;
+      bar.appendChild(seg);
+      const pct = Math.round((times[i] / total) * 100);
+      labels.appendChild(el("span", `zl ${ZONE_NAMES[i]}`, `${ZONE_TIME_LABELS[i]} ${pct}%`));
+    }
+    wrap.append(bar, labels);
+    return wrap;
+  }
 
   // Translucent intensity bands + hairlines at the divisors (when the current
   // config knows the participant's HR range). Bands span divisor-to-divisor

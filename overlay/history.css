@@ -214,6 +214,80 @@ h2 {
   vector-effect: non-scaling-stroke;
 }
 
+/* Time-in-zone bar + percentage labels under each participant's chart.
+   Full track width = max(1 hour, session duration). */
+.p-zonetime {
+  margin-top: 0.6rem;
+}
+
+.p-zonetime .zonebar {
+  display: flex;
+  height: 0.55rem;
+  border-radius: 0.28rem;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.p-zonetime .seg.rest {
+  background: #7a8699;
+}
+
+.p-zonetime .seg.z1 {
+  background: #4aa3ff;
+}
+
+.p-zonetime .seg.z2 {
+  background: #2ecc71;
+}
+
+.p-zonetime .seg.z3 {
+  background: #ffb020;
+}
+
+.p-zonetime .seg.z4 {
+  background: #ff7a45;
+}
+
+.p-zonetime .seg.z5,
+.p-zonetime .seg.over {
+  background: #ff2e33;
+}
+
+.p-zonetime .zonetime-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.9rem;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.p-zonetime .zl.rest {
+  color: #7a8699;
+}
+
+.p-zonetime .zl.z1 {
+  color: #4aa3ff;
+}
+
+.p-zonetime .zl.z2 {
+  color: #2ecc71;
+}
+
+.p-zonetime .zl.z3 {
+  color: #ffb020;
+}
+
+.p-zonetime .zl.z4 {
+  color: #ff7a45;
+}
+
+.p-zonetime .zl.z5,
+.p-zonetime .zl.over {
+  color: #ff2e33;
+}
+
 /* Axis labels; JS pins each to its gridline via an inline top. */
 .p-spark .y-tick {
   position: absolute;

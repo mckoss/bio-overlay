@@ -206,6 +206,53 @@ body {
   animation: over-pulse 0.8s ease-in-out infinite;
 }
 
+/* Zone-time bar: stacked share of session time per zone, right half of the
+   bottom row (opposite the zone chip). Full track width = max(1 hour,
+   session duration); the colored portion grows as the workout progresses. */
+.panel .zonebar {
+  grid-area: badge;
+  justify-self: end;
+  align-self: center;
+  width: 50%;
+  height: 0.5rem;
+  display: flex;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.panel .zonebar:empty {
+  display: none;
+}
+
+.panel .zonebar .seg.rest {
+  background: var(--zone-rest);
+}
+
+.panel .zonebar .seg.z1 {
+  background: var(--zone-z1);
+}
+
+.panel .zonebar .seg.z2 {
+  background: var(--zone-z2);
+}
+
+.panel .zonebar .seg.z3 {
+  background: var(--zone-z3);
+}
+
+.panel .zonebar .seg.z4 {
+  background: var(--zone-z4);
+}
+
+.panel .zonebar .seg.z5 {
+  background: var(--zone-z5);
+}
+
+.panel .zonebar .seg.over {
+  background: var(--zone-over);
+}
+
 @keyframes over-pulse {
   0%,
   100% {

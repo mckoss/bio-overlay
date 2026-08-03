@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
 from .respiration import estimate_respiration
-from .zones import zones_for
+from .zones import N_ZONE_BUCKETS, zone_index, zones_for
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,11 @@ DEFAULT_RESP_WINDOW_S = 60
 # After this long without any reading, the session auto-closes: stats clear,
 # panels hide, and the next reading (whenever it comes) starts a new session.
 DEFAULT_IDLE_CLOSE_S = 30 * 60
+
+# Zone-time accounting ignores gaps between readings longer than this
+# (dropouts). Must comfortably exceed the history writer's ~5s cadence so
+# seeding a restored session from file doesn't discard its intervals.
+ZONE_MAX_GAP_S = 15.0
 
 
 def _now() -> datetime:
@@ -77,6 +82,25 @@ class ParticipantState:
     rr_window: deque = field(default_factory=deque)
     respiration_brpm: float | None = None
     respiration_confidence: float | None = None
+    # Whole-session time per intensity bucket (rest, Z1..Z5, over max), in ms.
+    zone_ms: list = field(default_factory=lambda: [0] * N_ZONE_BUCKETS)
+    # Timestamp of the previous zone-accounted reading, for interval attribution.
+    zone_last_ms: int | None = None
+
+    def record_zone_time(self, bpm: int, at_ms: int, max_gap_ms: int) -> None:
+        """Attribute the time since the previous reading to this reading's zone.
+
+        Gaps longer than max_gap_ms (signal dropouts) are not attributed to
+        any bucket, so the bar only shows time actually tracked.
+        """
+        zones = zones_for(self.birth_year, self.max_hr)
+        if zones is None:
+            return
+        if self.zone_last_ms is not None:
+            dt = at_ms - self.zone_last_ms
+            if 0 < dt <= max_gap_ms:
+                self.zone_ms[zone_index(bpm, zones["divisors"])] += dt
+        self.zone_last_ms = at_ms
 
     def record(self, bpm: int, at_ms: int, window_ms: int) -> None:
         """Append a valid reading and update the rolling window + session stats."""
@@ -109,6 +133,7 @@ class ParticipantState:
         overlay never shows the estimate.
         """
         avg = round(self.session_sum / self.session_count) if self.session_count else None
+        zones = zones_for(self.birth_year, self.max_hr)
         return {
             "participantId": self.participant_id,
             "displayName": self.display_name,
@@ -120,7 +145,9 @@ class ParticipantState:
             "sensorContact": self.sensor_contact,
             "updatedAt": self.updated_at,
             # Intensity zones, or null when no birth year / max HR is configured.
-            "zones": zones_for(self.birth_year, self.max_hr),
+            "zones": zones,
+            # Whole-session ms per bucket (rest, Z1..Z5, over), or null.
+            "zoneTimesMs": list(self.zone_ms) if zones else None,
             # Full session history so the overlay is a stateless renderer.
             "samples": [[t, b] for (t, b) in self.samples],
             "session": {
@@ -273,6 +300,7 @@ class TelemetryHub:
             state.session_max = bpm if state.session_max is None else max(state.session_max, bpm)
             state.session_sum += bpm
             state.session_count += 1
+            state.record_zone_time(bpm, at_ms, int(ZONE_MAX_GAP_S * 1000))
             # Rolling windows only keep the recent tail.
             if at_ms >= spark_cutoff:
                 state.samples.append((at_ms, bpm))
@@ -339,6 +367,7 @@ class TelemetryHub:
         if bpm > 0:
             now_ms = int(now.timestamp() * 1000)
             state.record(bpm, now_ms, self._history_window_ms)
+            state.record_zone_time(bpm, now_ms, int(ZONE_MAX_GAP_S * 1000))
             if state.rr_intervals_ms:
                 state.record_rr(state.rr_intervals_ms, now_ms, self._resp_window_ms)
             if self._recorder is not None:
@@ -363,6 +392,8 @@ class TelemetryHub:
             state.rr_window.clear()
             state.respiration_brpm = None
             state.respiration_confidence = None
+            state.zone_ms = [0] * N_ZONE_BUCKETS
+            state.zone_last_ms = None
             if deactivate:
                 state.active = False
                 state.bpm = None

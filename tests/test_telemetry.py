@@ -127,6 +127,53 @@ def test_seed_history_restores_session_and_sparkline(hub):
     assert p1["samples"][0][1] == 150
 
 
+def test_seed_history_accumulates_zone_times():
+    """Zone-time buckets rebuild from seeded records; dropouts don't count."""
+    import time
+
+    h = TelemetryHub(stale_after_s=5.0)
+    h.register_participant("p1", "One", max_hr=160)  # divisors [80, 96, ..., 160]
+    now_ms = int(time.time() * 1000)
+    t0 = now_ms - 60 * 1000
+    records = [
+        # 3 readings 1s apart in rest (below 80): attributes 2s to rest.
+        {"t": _iso(t0), "participantId": "p1", "bpm": 70},
+        {"t": _iso(t0 + 1000), "participantId": "p1", "bpm": 70},
+        {"t": _iso(t0 + 2000), "participantId": "p1", "bpm": 70},
+        # 30s dropout (over the 15s zone-gap cap): not attributed.
+        # Then 2 readings 1s apart in Z2 (96..111): attributes 1s to Z2.
+        {"t": _iso(t0 + 32000), "participantId": "p1", "bpm": 100},
+        {"t": _iso(t0 + 33000), "participantId": "p1", "bpm": 100},
+    ]
+    h.seed_history(records)
+
+    p1 = h.snapshot()["participants"][0]
+    assert p1["zoneTimesMs"] == [2000, 0, 1000, 0, 0, 0, 0]
+
+
+def test_zone_times_null_without_zones(hub):
+    # No birth year / max HR configured -> no zone accounting.
+    p1 = hub.snapshot()["participants"][0]
+    assert p1["zoneTimesMs"] is None
+
+
+async def test_reset_session_clears_zone_times():
+    import time
+
+    h = TelemetryHub(stale_after_s=5.0)
+    h.register_participant("p1", "One", max_hr=160)
+    now_ms = int(time.time() * 1000)
+    h.seed_history(
+        [
+            {"t": _iso(now_ms - 2000), "participantId": "p1", "bpm": 70},
+            {"t": _iso(now_ms - 1000), "participantId": "p1", "bpm": 70},
+        ]
+    )
+    assert sum(h.snapshot()["participants"][0]["zoneTimesMs"]) == 1000
+    await h.reset_session()
+    assert h.snapshot()["participants"][0]["zoneTimesMs"] == [0] * 7
+
+
 async def test_reset_session_clears_history_keeps_connection(hub):
     await hub.update_measurement("participant-1", bpm=120, rr_intervals_ms=[500.0])
     await hub.update_measurement("participant-1", bpm=130)
