@@ -294,7 +294,7 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
-/* Axis labels, one per gridline: percent of max HR with zones (50%..100%),
+/* Axis labels, one per gridline: the zone BPM cut-offs with zones,
    window min/max BPM without. */
 .panel .spark-bounds {
   position: relative;

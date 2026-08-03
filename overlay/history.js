@@ -174,16 +174,12 @@
         pts.map((p) => `L ${p}`).join(" ") +
         ` L ${x(sN).toFixed(1)},${SPARK_H} Z"/>`;
 
-    // Axis labels pinned to their gridlines: with zones, every divisor as a
-    // percent of max HR (50%..100%); otherwise the data min/max in BPM.
+    // Axis labels pinned to their gridlines: with zones, every divisor as its
+    // BPM cut-off; otherwise the data min/max in BPM.
     const pct = (v) => ((v / SPARK_H) * 100).toFixed(1) + "%";
     const labels = banded
       ? zones.divisors
-          .map(
-            (d) =>
-              `<span class="y-tick" style="top:${pct(y(d))}">` +
-              `${Math.round((d / zones.maxHr) * 100)}%</span>`
-          )
+          .map((d) => `<span class="y-tick" style="top:${pct(y(d))}">${d}</span>`)
           .join("")
       : `<span class="y-tick" style="top:${pct(y(dataHi))}">${dataHi}</span>` +
         `<span class="y-tick" style="top:${pct(y(dataLo))}">${dataLo}</span>`;

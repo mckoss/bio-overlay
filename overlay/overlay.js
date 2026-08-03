@@ -167,14 +167,14 @@
     return [Math.round(zones.maxHr * 0.45), Math.round(zones.maxHr * 1.05)];
   }
 
-  // Axis labels beside the chart. With zones: every gridline, as a percent of
-  // max HR (50% / 65% / 80% / 100%). Without: the window min/max in BPM.
+  // Axis labels beside the chart. With zones: every gridline, as the zone's
+  // BPM cut-off. Without: the window min/max in BPM.
   function renderBounds(panel, zones, y, dataLo, dataHi) {
     const tick = (yPos, text) =>
       `<div class="tick" style="top:${((yPos / SPARK_H) * 100).toFixed(1)}%">${text}</div>`;
     if (zones && Array.isArray(zones.divisors)) {
       panel.boundsEl.innerHTML = zones.divisors
-        .map((d) => tick(y(d), `${Math.round((d / zones.maxHr) * 100)}%`))
+        .map((d) => tick(y(d), String(d)))
         .join("");
     } else {
       panel.boundsEl.innerHTML = tick(y(dataHi), dataHi) + tick(y(dataLo), dataLo);
