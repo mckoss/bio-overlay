@@ -2,9 +2,11 @@
 
 Real-time heart-rate video overlay for remote training sessions.
 
-![Overlay page showing two participant cards with live BPM, intensity-zone
-chips, banded sparklines, and the session clock — composited over a dark
-backdrop standing in for video](docs/overlay-screenshot.png)
+![Overlay page showing two participant cards with live BPM colored by
+intensity zone, zone chips (Z1: Recovery / Z2: Endurance), banded sparklines
+with BPM cut-off labels, time-in-zone bars, and the session clock —
+composited over a dark backdrop standing in for
+video](docs/overlay-screenshot.png)
 
 bio-overlay reads live heart-rate data from up to two Polar BLE chest straps in
 one location, renders those metrics as a transparent browser overlay, and lets
