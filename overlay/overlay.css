@@ -156,7 +156,7 @@ body {
   animation: over-pulse 0.8s ease-in-out infinite;
 }
 
-/* Zone chip next to the live BPM: REST / ZONE 1..ZONE 5 / OVER MAX. */
+/* Zone chip next to the live BPM: Rest / Z1: Recovery..Z5: Peak / SUPERMAX. */
 .panel .zone {
   align-self: center;
   margin-left: 0.4rem;

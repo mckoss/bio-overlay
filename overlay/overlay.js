@@ -115,13 +115,13 @@
   // Intensity zones (from the server: Tanaka HRmax + band divisors).
   const ZONE_NAMES = ["rest", "z1", "z2", "z3", "z4", "z5", "over"];
   const ZONE_LABELS = {
-    rest: "REST",
-    z1: "ZONE 1",
-    z2: "ZONE 2",
-    z3: "ZONE 3",
-    z4: "ZONE 4",
-    z5: "ZONE 5",
-    over: "OVER MAX",
+    rest: "Rest",
+    z1: "Z1: Recovery",
+    z2: "Z2: Endurance",
+    z3: "Z3: Aerobic",
+    z4: "Z4: Threshold",
+    z5: "Z5: Peak",
+    over: "SUPERMAX",
   };
 
   function zoneFor(bpm, zones) {
