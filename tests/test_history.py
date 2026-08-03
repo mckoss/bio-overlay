@@ -217,3 +217,76 @@ def test_load_session_bad_id(tmp_path):
 
     assert load_session(tmp_path, "nope") is None
     assert load_session(tmp_path, "2026-06-26__9") is None
+
+
+async def test_list_sessions_zone_times(tmp_path):
+    from bio_overlay.history import list_sessions
+    from bio_overlay.zones import zones_for
+
+    w = DailyHistoryWriter(tmp_path, min_interval_s=5.0)
+    w.start_session(_participants("alice"))
+    # 5s apart (within the zone gap cap): 70 is rest, 100 is Z2 for HRmax 160.
+    w.record(_state("alice"), 70, [], _at(second=0, ms=0))
+    w.record(_state("alice"), 70, [], _at(second=5, ms=0))
+    w.record(_state("alice"), 100, [], _at(second=10, ms=0))
+    await w.close()
+
+    divisors = zones_for(None, max_hr=160)["divisors"]  # [80, 96, 112, 128, 144, 160]
+    sessions = list_sessions(tmp_path, divisors_by_id={"alice": divisors})
+    assert len(sessions) == 1
+    zt = sessions[0]["zoneTimes"]
+    assert zt == [{"name": "Alice", "timesS": [5, 0, 5, 0, 0, 0, 0]}]
+    # Without a divisors mapping the summaries stay lean (no zoneTimes key).
+    assert "zoneTimes" not in list_sessions(tmp_path)[0]
+    # Unknown ids fall back to default_divisors.
+    with_default = list_sessions(tmp_path, divisors_by_id={}, default_divisors=divisors)
+    assert with_default[0]["zoneTimes"][0]["timesS"] == [5, 0, 5, 0, 0, 0, 0]
+
+
+async def test_delete_session(tmp_path):
+    from bio_overlay.history import delete_session, list_sessions
+
+    w = DailyHistoryWriter(tmp_path)
+    w.start_session(_participants("alice"))
+    w.record(_state("alice"), 70, [], _at(second=0, ms=0))
+    w.reset_session()
+    w.record(_state("alice"), 90, [], _at(second=30, ms=0))
+    await w.close()
+    assert len(list_sessions(tmp_path)) == 2
+
+    # Delete the first session; the second remains (re-indexed to __0).
+    assert delete_session(tmp_path, "2026-06-26__0")
+    sessions = list_sessions(tmp_path)
+    assert len(sessions) == 1
+    assert sessions[0]["id"] == "2026-06-26__0"
+    recs = read_records(tmp_path, "2026-06-26")
+    assert [r["bpm"] for r in recs] == [90]
+
+    # Unknown ids are refused.
+    assert not delete_session(tmp_path, "2026-06-26__5")
+    assert not delete_session(tmp_path, "bogus")
+
+    # Deleting the last session removes the file entirely.
+    assert delete_session(tmp_path, "2026-06-26__0")
+    assert list_sessions(tmp_path) == []
+    assert not (tmp_path / "2026-06-26.jsonl").exists()
+
+
+async def test_writer_resync_after_external_rewrite(tmp_path):
+    from bio_overlay.history import delete_session, list_sessions
+
+    w = DailyHistoryWriter(tmp_path)
+    w.start_session(_participants("alice"))
+    w.record(_state("alice"), 70, [], _at(second=0, ms=0))
+
+    # Simulate the delete API removing the live session, then resyncing.
+    assert delete_session(tmp_path, "2026-06-26__0")
+    w.resync()
+    w.record(_state("alice"), 95, [], _at(second=59, ms=0))
+    await w.close()
+
+    # The post-delete reading landed under a fresh header in the replaced file.
+    sessions = list_sessions(tmp_path)
+    assert len(sessions) == 1
+    recs = read_records(tmp_path, "2026-06-26")
+    assert [r["bpm"] for r in recs] == [95]

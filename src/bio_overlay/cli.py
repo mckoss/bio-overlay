@@ -168,6 +168,7 @@ async def _serve_with_source(
         apply_config=apply_config,
         port_scan=port_scan,
         history_dir=history_read_dir,
+        history_writer=writer,
         request_shutdown=lambda: loop.call_soon_threadsafe(stop.set),
         start_new_session=start_new_session,
     )

@@ -32,7 +32,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .telemetry import ParticipantState
+from .telemetry import ZONE_MAX_GAP_S, ParticipantState
+from .zones import N_ZONE_BUCKETS, zone_index
 
 logger = logging.getLogger(__name__)
 
@@ -143,8 +144,41 @@ def _parse_sessions(path: Path) -> list[dict]:
     return sessions
 
 
-def list_sessions(directory: str | Path) -> list[dict]:
-    """Summaries of all recorded sessions, newest first."""
+def _zone_times_s(data: list[dict], idx: int, divisors: list[int]) -> list[int]:
+    """Seconds per intensity bucket for one participant's data lines.
+
+    Mirrors the live accumulator: each interval between consecutive samples is
+    attributed to the newer sample's zone; gaps over ZONE_MAX_GAP_S (dropouts)
+    are not attributed.
+    """
+    times = [0] * N_ZONE_BUCKETS
+    last: float | None = None
+    for d in data:
+        if d.get("p") != idx:
+            continue
+        s, bpm = d.get("s"), d.get("bpm")
+        if not isinstance(s, (int, float)) or not bpm:
+            continue
+        if last is not None:
+            dt = s - last
+            if 0 < dt <= ZONE_MAX_GAP_S:
+                times[zone_index(bpm, divisors)] += dt
+        last = s
+    return times
+
+
+def list_sessions(
+    directory: str | Path,
+    divisors_by_id: dict[str, list[int]] | None = None,
+    default_divisors: list[int] | None = None,
+) -> list[dict]:
+    """Summaries of all recorded sessions, newest first.
+
+    With `divisors_by_id` (participant id -> zone divisors), each summary also
+    carries per-participant time-in-zone totals as
+    ``zoneTimes: [{"name", "timesS"}]`` so the list view can draw bars;
+    `default_divisors` covers ids missing from the mapping.
+    """
     out: list[dict] = []
     for path in sorted(Path(directory).glob("*.jsonl")):
         date = path.stem
@@ -155,23 +189,92 @@ def list_sessions(directory: str | Path) -> list[dict]:
                 continue  # skip empty sessions (header but no readings)
             parts = sess["participants"]
             present = sorted({d["p"] for d in data if isinstance(d.get("p"), int)})
-            names = [
-                (parts[p].get("name") or parts[p].get("id"))
-                for p in present
-                if 0 <= p < len(parts)
-            ]
-            out.append(
-                {
-                    "id": f"{date}__{i}",
-                    "date": date,
-                    "startedAt": sess["start"],
-                    "durationS": max(offs) - min(offs),
-                    "participants": names,
-                    "samples": len(data),
-                }
-            )
+            present = [p for p in present if 0 <= p < len(parts)]
+            names = [(parts[p].get("name") or parts[p].get("id")) for p in present]
+            summary = {
+                "id": f"{date}__{i}",
+                "date": date,
+                "startedAt": sess["start"],
+                "durationS": max(offs) - min(offs),
+                "participants": names,
+                "samples": len(data),
+            }
+            if divisors_by_id is not None:
+                zone_times = []
+                for p in present:
+                    divisors = divisors_by_id.get(parts[p].get("id")) or default_divisors
+                    if not divisors:
+                        continue
+                    zone_times.append(
+                        {
+                            "name": parts[p].get("name") or parts[p].get("id"),
+                            "timesS": _zone_times_s(data, p, divisors),
+                        }
+                    )
+                summary["zoneTimes"] = zone_times
+            out.append(summary)
     out.sort(key=lambda s: s.get("startedAt") or "", reverse=True)
     return out
+
+
+def delete_session(directory: str | Path, session_id: str) -> bool:
+    """Remove one session (its header + data lines) from its day's file.
+
+    Rewrites the file atomically; removes the file entirely when the deleted
+    session was the only content. Returns False for an unknown id. Note that
+    session ids are positional (date__index), so ids of later sessions in the
+    same file shift down after a delete — callers should re-fetch the list.
+    """
+    date, sep, idx_s = session_id.partition("__")
+    if not sep:
+        return False
+    try:
+        idx = int(idx_s)
+    except ValueError:
+        return False
+    path = Path(directory) / f"{date}.jsonl"
+    if not path.exists():
+        return False
+
+    kept: list[str] = []
+    session_i = -1
+    found = False
+    has_content = False
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            rec = None
+            if stripped:
+                try:
+                    rec = json.loads(stripped)
+                except ValueError:
+                    rec = None  # torn line: keep it with whatever session it's in
+            if rec is not None and "session" in rec:
+                session_i += 1
+            if session_i == idx:
+                found = True
+                continue  # drop this session's header and data lines
+            kept.append(line)
+            if rec is not None and "session" not in rec:
+                has_content = True
+    except OSError as exc:
+        logger.warning("could not read %s for delete: %s", path, exc)
+        return False
+    if not found:
+        return False
+
+    try:
+        if not has_content:
+            path.unlink()
+        else:
+            tmp = path.with_suffix(".jsonl.tmp")
+            tmp.write_text("\n".join(kept) + "\n", encoding="utf-8")
+            tmp.replace(path)
+    except OSError as exc:
+        logger.warning("could not rewrite %s: %s", path, exc)
+        return False
+    logger.info("deleted session %s", session_id)
+    return True
 
 
 def load_session(directory: str | Path, session_id: str) -> dict | None:
@@ -299,6 +402,19 @@ class DailyHistoryWriter:
             self._write_line(state.participant_id, pend)
             pend.last_ms = at_ms
             pend.rr = []
+
+    def resync(self) -> None:
+        """Reopen the day's file and re-emit a header before the next line.
+
+        Call after the file was rewritten externally (e.g. a session delete):
+        the old append handle points at the replaced inode, and the current
+        session header may have been removed.
+        """
+        if self._fh is not None:
+            self._fh.close()
+            self._fh = None
+        self._date = None  # forces a rollover (reopen + header) on next record
+        self._pending.clear()
 
     def start(self) -> None:  # kept for API symmetry; nothing to schedule
         pass
