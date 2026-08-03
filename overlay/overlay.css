@@ -62,6 +62,7 @@ body {
     "live spark"
     "session session"
     "resp resp"
+    "zwarn zwarn"
     "badge badge";
   column-gap: 1rem;
   row-gap: 0.45rem;
@@ -222,6 +223,20 @@ body {
 }
 
 .panel .zonebar:empty {
+  display: none;
+}
+
+/* Warning that zones assume a default age (no birth year / max HR set).
+   Its grid row collapses when empty, like the respiration row. */
+.panel .zone-warn {
+  grid-area: zwarn;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #ffb020;
+}
+
+.panel .zone-warn:empty {
   display: none;
 }
 

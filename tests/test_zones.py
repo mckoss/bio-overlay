@@ -32,9 +32,22 @@ def test_explicit_max_overrides_formula():
     assert zones_for(1960, max_hr=175, year=2026)["maxHr"] == 175
 
 
-def test_no_config_no_zones():
-    assert zones_for(None) is None
-    assert zones_for(None, max_hr=0) is None
+def test_no_config_assumes_default_age():
+    # Age 65: 208 - 0.7 * 65 = 162.5 -> 162, flagged so clients can warn.
+    expected = {
+        "maxHr": 162,
+        "divisors": [81, 97, 113, 130, 146, 162],
+        "assumedAge": 65,
+    }
+    assert zones_for(None) == expected
+    assert zones_for(None, max_hr=0) == expected
+    # An implausible birth year (a typo) also falls back to the default.
+    assert zones_for(65, year=2026) == expected
+
+
+def test_configured_zones_carry_no_assumed_flag():
+    assert "assumedAge" not in zones_for(1960, year=2026)
+    assert "assumedAge" not in zones_for(None, max_hr=175)
 
 
 def test_zone_index_buckets():

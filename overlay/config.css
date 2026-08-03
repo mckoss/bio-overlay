@@ -100,6 +100,19 @@ h2 {
   margin-bottom: 0.6rem;
 }
 
+/* Default-age warning: full-width note under the participant's fields,
+   hidden (collapsed) once a birth year or max HR is entered. */
+.participant .zone-default-warn {
+  grid-column: 1 / -1;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ffb020;
+}
+
+.participant .zone-default-warn:empty {
+  display: none;
+}
+
 .field {
   display: flex;
   flex-direction: column;

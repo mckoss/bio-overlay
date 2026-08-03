@@ -38,7 +38,9 @@ def test_snapshot_includes_zones_when_configured():
     h.register_participant("p2", "Two")
     states = {p["participantId"]: p for p in h.snapshot()["participants"]}
     assert states["p1"]["zones"] == {"maxHr": 160, "divisors": [80, 96, 112, 128, 144, 160]}
-    assert states["p2"]["zones"] is None
+    # Unconfigured participants fall back to the default assumed age.
+    assert states["p2"]["zones"]["assumedAge"] == 65
+    assert states["p2"]["zones"]["maxHr"] == 162
 
 
 def test_participants_start_inactive(hub):
@@ -151,10 +153,15 @@ def test_seed_history_accumulates_zone_times():
     assert p1["zoneTimesMs"] == [2000, 0, 1000, 0, 0, 0, 0]
 
 
-def test_zone_times_null_without_zones(hub):
-    # No birth year / max HR configured -> no zone accounting.
+async def test_zone_times_accumulate_with_default_age(hub):
+    # No birth year / max HR configured: zones assume the default age, so
+    # zone time still accrues (against the assumed divisors).
+    assert hub.snapshot()["participants"][0]["zoneTimesMs"] == [0] * 7
+    await hub.update_measurement("participant-1", bpm=100)
+    await hub.update_measurement("participant-1", bpm=100)
     p1 = hub.snapshot()["participants"][0]
-    assert p1["zoneTimesMs"] is None
+    # 100 bpm vs assumed HRmax 162 (divisors [81, 97, ...]) is Z2.
+    assert sum(p1["zoneTimesMs"]) == p1["zoneTimesMs"][2]
 
 
 async def test_reset_session_clears_zone_times():
