@@ -56,8 +56,7 @@
     const live = el("div", "live");
     const bpmEl = el("div", "bpm", "--");
     const unitEl = el("div", "unit", "BPM");
-    const zoneEl = el("div", "zone");
-    live.append(bpmEl, unitEl, zoneEl);
+    live.append(bpmEl, unitEl);
 
     // The sparkline sits beside the name AND the live BPM (grid area spans
     // both rows) so the chart gets as much vertical space as possible.
@@ -68,9 +67,12 @@
 
     const sessionEl = el("div", "session");
     const respEl = el("div", "resp");
+    // The zone chip shares the bottom row with the "no signal" badge: the chip
+    // only shows with a live signal, the badge only without one.
+    const zoneEl = el("div", "zone");
     const badgeEl = el("div", "badge");
 
-    root.append(nameEl, live, spark, sessionEl, respEl, badgeEl);
+    root.append(nameEl, live, spark, sessionEl, respEl, zoneEl, badgeEl);
     panelsEl.appendChild(root);
 
     panel = { root, nameEl, bpmEl, zoneEl, sparkEl, boundsEl, sessionEl, respEl, badgeEl };

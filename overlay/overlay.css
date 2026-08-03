@@ -156,10 +156,13 @@ body {
   animation: over-pulse 0.8s ease-in-out infinite;
 }
 
-/* Zone chip next to the live BPM: Rest / Z1: Recovery..Z5: Peak / SUPERMAX. */
+/* Zone chip (Rest / Z1: Recovery..Z5: Peak / SUPERMAX) in the card's bottom
+   row. It shares the badge grid area with "no signal": the chip is empty
+   (hidden) exactly when the badge shows, so they never collide. */
 .panel .zone {
+  grid-area: badge;
+  justify-self: start;
   align-self: center;
-  margin-left: 0.4rem;
   padding: 0.12rem 0.45rem;
   border-radius: 0.3rem;
   font-size: 0.85rem;
@@ -401,7 +404,9 @@ body {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--muted);
-  min-height: 1rem;
+  /* Reserve the height of the zone chip so swapping between the chip and
+     "no signal" doesn't resize the card. */
+  min-height: 1.3rem;
 }
 
 .panel.stale .badge::after {
