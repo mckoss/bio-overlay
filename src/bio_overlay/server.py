@@ -116,10 +116,42 @@ async def _history_page(request: web.Request) -> web.Response:
 
 async def _api_history(request: web.Request) -> web.Response:
     from .history import list_sessions
+    from .zones import zones_for
 
     directory = request.app["history_dir"]
-    sessions = list_sessions(directory) if directory else []
+    if not directory:
+        return web.json_response({"sessions": []})
+    # Zone divisors per configured participant id, so listings can carry
+    # time-in-zone totals; ids not in the current config get the default
+    # assumed-age zones (same fallback the live overlay uses).
+    config = request.app.get("config")
+    divisors_by_id: dict = {}
+    if config:
+        divisors_by_id = {
+            p.id: zones_for(p.birth_year, p.max_hr)["divisors"] for p in config.participants
+        }
+    sessions = list_sessions(
+        directory,
+        divisors_by_id=divisors_by_id,
+        default_divisors=zones_for(None)["divisors"],
+    )
     return web.json_response({"sessions": sessions})
+
+
+async def _api_delete_session(request: web.Request) -> web.Response:
+    from .history import delete_session
+
+    directory = request.app["history_dir"]
+    if not directory:
+        raise web.HTTPNotFound(reason="no history directory")
+    if not delete_session(directory, request.match_info["id"]):
+        raise web.HTTPNotFound(reason="session not found")
+    # A live writer's append handle now points at the replaced file (and its
+    # session header may be gone) — make it reopen and re-describe.
+    writer = request.app.get("history_writer")
+    if writer is not None:
+        writer.resync()
+    return web.json_response({"ok": True})
 
 
 async def _api_session(request: web.Request) -> web.Response:
@@ -136,7 +168,9 @@ async def _api_session(request: web.Request) -> web.Response:
     by_id = {p.id: p for p in config.participants} if config else {}
     for part in session["participants"]:
         pc = by_id.get(part.get("id"))
-        part["zones"] = zones_for(pc.birth_year, pc.max_hr) if pc else None
+        # Ids no longer in the config fall back to the default assumed-age
+        # zones, matching the live overlay.
+        part["zones"] = zones_for(pc.birth_year, pc.max_hr) if pc else zones_for(None)
     return web.json_response(session)
 
 
@@ -259,6 +293,7 @@ def build_app(
     config_path: str | None = None,
     apply_config=None,
     history_dir: str | None = None,
+    history_writer=None,
     request_shutdown=None,
     start_new_session=None,
 ) -> web.Application:
@@ -268,6 +303,7 @@ def build_app(
     app["config_path"] = config_path
     app["apply_config"] = apply_config
     app["history_dir"] = history_dir
+    app["history_writer"] = history_writer
     app["request_shutdown"] = request_shutdown
     app["start_new_session"] = start_new_session
     app["websockets"] = set()
@@ -284,6 +320,7 @@ def build_app(
             web.get("/api/scan", _scan),
             web.get("/api/history", _api_history),
             web.get("/api/history/{id}", _api_session),
+            web.delete("/api/history/{id}", _api_delete_session),
             web.post("/api/new-session", _new_session),
             web.post("/api/quit", _quit),
         ]
@@ -323,6 +360,7 @@ async def run_server(
     apply_config=None,
     port_scan: bool = False,
     history_dir: str | None = None,
+    history_writer=None,
     request_shutdown=None,
     start_new_session=None,
 ) -> tuple[web.AppRunner, int]:
@@ -333,6 +371,7 @@ async def run_server(
         config_path=config_path,
         apply_config=apply_config,
         history_dir=history_dir,
+        history_writer=history_writer,
         request_shutdown=request_shutdown,
         start_new_session=start_new_session,
     )

@@ -81,10 +81,20 @@ h2 {
   gap: 0.5rem;
 }
 
+/* Card + delete button side by side (the card itself is a <button>, so the
+   delete control can't nest inside it). */
+.session-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
 .session {
+  flex: 1;
+  min-width: 0;
   display: grid;
   grid-template-columns: 1fr auto;
-  grid-template-areas: "when dur" "who who";
+  grid-template-areas: "when dur" "who who" "bars bars";
   gap: 0.15rem 1rem;
   text-align: left;
   background: var(--panel);
@@ -94,6 +104,53 @@ h2 {
   color: var(--text);
   font: inherit;
   cursor: pointer;
+}
+
+.btn-delete {
+  flex: none;
+  align-self: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: inherit;
+  padding: 0.4rem 0.55rem;
+  cursor: pointer;
+}
+
+.btn-delete:hover {
+  color: #ff4d4f;
+  border-color: #ff4d4f;
+}
+
+/* Inline per-participant zone bars on each session card. */
+.session .list-zonebars {
+  grid-area: bars;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+}
+
+.session .list-zonebar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.session .list-zonebar-row .zonebar {
+  flex: 1;
+  min-width: 0;
+}
+
+.session .zl-name {
+  flex: none;
+  width: 4.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .session:hover {
@@ -122,8 +179,12 @@ h2 {
 .detail-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.detail-head .btn-delete {
+  margin-left: auto;
 }
 
 .dur-big {
@@ -214,18 +275,14 @@ h2 {
   vector-effect: non-scaling-stroke;
 }
 
-/* Time-in-zone bar + percentage labels under each participant's chart. Only
+/* Time-in-zone bars (shared by the session list and the detail page). Only
    zone colors are drawn (no background track); the bar's length = session
    time relative to max(1 hour, session duration). */
-.p-zonetime {
-  margin-top: 0.6rem;
-}
-
-.p-zonetime .zonebar {
+.zonebar {
   display: flex;
 }
 
-.p-zonetime .segs {
+.zonebar .segs {
   display: flex;
   height: 0.55rem;
   min-width: 0.28rem;
@@ -233,29 +290,33 @@ h2 {
   overflow: hidden;
 }
 
-.p-zonetime .seg.rest {
+.zonebar .seg.rest {
   background: #7a8699;
 }
 
-.p-zonetime .seg.z1 {
+.zonebar .seg.z1 {
   background: #4aa3ff;
 }
 
-.p-zonetime .seg.z2 {
+.zonebar .seg.z2 {
   background: #2ecc71;
 }
 
-.p-zonetime .seg.z3 {
+.zonebar .seg.z3 {
   background: #ffb020;
 }
 
-.p-zonetime .seg.z4 {
+.zonebar .seg.z4 {
   background: #ff7a45;
 }
 
-.p-zonetime .seg.z5,
-.p-zonetime .seg.over {
+.zonebar .seg.z5,
+.zonebar .seg.over {
   background: #ff2e33;
+}
+
+.p-zonetime {
+  margin-top: 0.6rem;
 }
 
 .p-zonetime .zonetime-labels {

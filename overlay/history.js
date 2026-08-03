@@ -68,9 +68,52 @@
       card.append(el("span", "dur", fmtDuration(s.durationS)));
       const who = (s.participants || []).join(", ") || "—";
       card.append(el("span", "who", who));
+      // Inline time-in-zone bars (one per participant), all on the same
+      // max(1 hour, duration) scale so sessions compare at a glance.
+      const zt = s.zoneTimes || [];
+      if (zt.length) {
+        const bars = el("span", "list-zonebars");
+        const scaleS = Math.max(ZONEBAR_MIN_SCALE_S, s.durationS || 0);
+        for (const z of zt) {
+          const bar = zoneBarEl(z.timesS || [], scaleS);
+          if (!bar) continue;
+          const row = el("span", "list-zonebar-row");
+          if (zt.length > 1) row.append(el("span", "zl-name", z.name || ""));
+          row.append(bar);
+          bars.append(row);
+        }
+        card.append(bars);
+      }
       card.addEventListener("click", () => loadDetail(s.id));
-      sessionsEl.appendChild(card);
+
+      const row = el("div", "session-row");
+      const del = el("button", "btn-delete", "✕");
+      del.title = "Delete this session";
+      del.addEventListener("click", () => deleteSession(s));
+      row.append(card, del);
+      sessionsEl.appendChild(row);
     }
+  }
+
+  async function deleteSession(s) {
+    const who = (s.participants || []).join(", ") || "—";
+    const ok = window.confirm(
+      `Delete the session from ${fmtStarted(s.startedAt)} (${who}, ` +
+      `${fmtDuration(s.durationS)})? This permanently removes its recorded data.`
+    );
+    if (!ok) return;
+    try {
+      const res = await fetch("/api/history/" + encodeURIComponent(s.id), {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(await res.text());
+    } catch (err) {
+      alert("Could not delete session: " + err.message);
+    }
+    // Ids are positional within a day's file, so always re-fetch after a
+    // delete — and return to the list in case we came from the detail view.
+    showList();
+    loadList();
   }
 
   async function loadDetail(id) {
@@ -92,6 +135,16 @@
     const head = el("div", "detail-head");
     head.append(el("h2", null, fmtStarted(session.startedAt)));
     head.append(el("span", "dur-big", "duration " + fmtDuration(session.durationS)));
+    const del = el("button", "btn-delete", "✕ Delete session");
+    del.addEventListener("click", () =>
+      deleteSession({
+        id: session.id,
+        startedAt: session.startedAt,
+        durationS: session.durationS,
+        participants: (session.participants || []).map((p) => p.name),
+      })
+    );
+    head.append(del);
     detailEl.appendChild(head);
 
     for (const p of session.participants || []) {
@@ -133,8 +186,28 @@
     return d.length - 1; // bpm == HRmax -> Z5
   }
 
-  // Stacked bar of time per zone + percentage labels. Track width =
-  // max(1 hour, session duration), so sessions are comparable by length.
+  // Stacked bar of time per zone. Only zone colors are drawn (no background
+  // track): a wrapper sized to tracked-time/scale holds the segments, which
+  // split it proportionally. Returns null when there's no tracked time.
+  function zoneBarEl(timesS, scaleS) {
+    const total = timesS.reduce((a, b) => a + b, 0);
+    if (!total) return null;
+    const bar = el("span", "zonebar");
+    const segs = el("span", "segs");
+    segs.style.width = `${((total / scaleS) * 100).toFixed(2)}%`;
+    bar.appendChild(segs);
+    timesS.forEach((t, i) => {
+      if (!t) return;
+      const seg = el("span", `seg ${ZONE_NAMES[i]}`);
+      seg.style.flexGrow = t;
+      segs.appendChild(seg);
+    });
+    return bar;
+  }
+
+  // Detail-page bar: computed from the session's points, plus percentage
+  // labels. Track width = max(1 hour, session duration), so sessions are
+  // comparable by length.
   function zoneTimeBar(points, zones) {
     if (!zones || !Array.isArray(zones.divisors) || points.length < 2) return null;
     const times = new Array(ZONE_NAMES.length).fill(0);
@@ -149,22 +222,14 @@
 
     const scaleS = Math.max(ZONEBAR_MIN_SCALE_S, points[points.length - 1][0] - points[0][0]);
     const wrap = el("div", "p-zonetime");
-    const bar = el("div", "zonebar");
-    // Only zone colors are drawn (no background track): a wrapper sized to
-    // tracked-time/scale holds the segments, which split it proportionally.
-    const segs = el("span", "segs");
-    segs.style.width = `${((total / scaleS) * 100).toFixed(2)}%`;
-    bar.appendChild(segs);
+    wrap.append(zoneBarEl(times, scaleS));
     const labels = el("div", "zonetime-labels");
     for (let i = 0; i < times.length; i++) {
       if (!times[i]) continue;
-      const seg = el("span", `seg ${ZONE_NAMES[i]}`);
-      seg.style.flexGrow = times[i];
-      segs.appendChild(seg);
       const pct = Math.round((times[i] / total) * 100);
       labels.appendChild(el("span", `zl ${ZONE_NAMES[i]}`, `${ZONE_TIME_LABELS[i]} ${pct}%`));
     }
-    wrap.append(bar, labels);
+    wrap.append(labels);
     return wrap;
   }
 
@@ -248,11 +313,13 @@
     return wrap;
   }
 
-  document.getElementById("back").addEventListener("click", () => {
+  function showList() {
     location.hash = "";
     detailView.hidden = true;
     listView.hidden = false;
-  });
+  }
+
+  document.getElementById("back").addEventListener("click", showList);
 
   // Deep-link: /history#<session-id> opens that session directly.
   const initial = decodeURIComponent(location.hash.replace(/^#/, ""));
