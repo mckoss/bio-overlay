@@ -87,6 +87,11 @@ if sys.platform == "darwin":
             "CFBundleShortVersionString": VERSION,
             "CFBundleVersion": VERSION,
             "LSMinimumSystemVersion": "11.0",
+            # Agent (faceless) app: the UI lives in the browser, and the process
+            # never starts a Cocoa event loop. Without this, LaunchServices
+            # times out waiting for the app to check in with the window server
+            # and shows "the application is not open anymore" on launch.
+            "LSUIElement": True,
             "NSBluetoothAlwaysUsageDescription":
                 "bio-overlay reads heart-rate data from Bluetooth chest straps.",
             "NSBluetoothPeripheralUsageDescription":
