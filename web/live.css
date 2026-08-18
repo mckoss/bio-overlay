@@ -124,3 +124,80 @@ body {
   font-size: 0.78rem;
   text-shadow: none;
 }
+
+/* Strap profile editor: small centered card above the control bar. */
+#profile-editor {
+  position: absolute;
+  bottom: 6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 19rem;
+  padding: 0.9rem 1.1rem;
+  background: rgba(10, 14, 20, 0.95);
+  border: 1px solid #2c3846;
+  border-radius: 10px;
+  z-index: 20;
+  text-shadow: none;
+  font-size: 0.85rem;
+  color: #e8edf4;
+}
+
+#profile-editor.hidden {
+  display: none;
+}
+
+#profile-editor .pe-title {
+  font-weight: 700;
+}
+
+#profile-editor .pe-hint {
+  color: #8b98a9;
+  font-weight: 400;
+  font-size: 0.75rem;
+}
+
+#profile-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+#profile-editor input {
+  background: #1a212b;
+  border: 1px solid #2c3846;
+  border-radius: 6px;
+  color: #e8edf4;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+#profile-editor input:focus {
+  outline: none;
+  border-color: #4fc3f7;
+}
+
+#profile-editor .pe-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+#profile-editor button {
+  background: #4fc3f7;
+  border: none;
+  color: #08222e;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#profile-editor button.secondary {
+  background: #2c3846;
+  color: #e8edf4;
+}

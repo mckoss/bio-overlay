@@ -1,7 +1,10 @@
 // Web Bluetooth strap connection with auto-reconnect.
 //
 // Wraps the chooser + Heart Rate Service notification flow validated by the
-// phase-0 test page (index.html) into a reusable module.
+// phase-0 test page (index.html) into a reusable module. The chooser
+// (requestStrap) is separate from streaming (streamStrap) so callers can
+// detect an already-connected device by its id BEFORE attaching a second
+// notification listener (which would double-count every reading).
 
 import { parseHrMeasurement } from "./hr-parser.js";
 
@@ -20,20 +23,23 @@ export function deviceIdFromName(name) {
   return null;
 }
 
+/** Show the chooser and return the picked BluetoothDevice (no connection yet). */
+export function requestStrap() {
+  return navigator.bluetooth.requestDevice({
+    filters: [{ services: [HR_SERVICE] }],
+    optionalServices: [BATTERY_SERVICE],
+  });
+}
+
 /**
- * Show the chooser and stream heart-rate notifications from the picked strap.
+ * Connect to a chosen device and stream heart-rate notifications.
  *
  * Callbacks: onReading({bpm, rrIntervalsMs, sensorContact}), and optional
  * onStatus(text, kind: "ok"|"warn"|"err"), onBattery(percent).
  * Returns {device, name, deviceId, disconnect()}. Reconnects automatically
  * with backoff unless disconnect() was called.
  */
-export async function connectStrap({ onReading, onStatus = () => {}, onBattery = () => {} }) {
-  const device = await navigator.bluetooth.requestDevice({
-    filters: [{ services: [HR_SERVICE] }],
-    optionalServices: [BATTERY_SERVICE],
-  });
-
+export async function streamStrap(device, { onReading, onStatus = () => {}, onBattery = () => {} }) {
   let intentional = false;
 
   async function start() {

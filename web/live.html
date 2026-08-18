@@ -32,6 +32,22 @@
     <span id="notice"></span>
   </div>
 
+  <!-- Inline strap profile editor: opens when a new strap connects, or when
+       a strap chip is clicked. Persists to localStorage. -->
+  <div id="profile-editor" class="hidden">
+    <div class="pe-title">Strap <span id="pe-device"></span></div>
+    <label>Name
+      <input id="pe-name" type="text" autocomplete="off" />
+    </label>
+    <label>Birth year <span class="pe-hint">(for zones; blank assumes age 65)</span>
+      <input id="pe-by" type="number" min="1900" max="2026" placeholder="e.g. 1960" />
+    </label>
+    <div class="pe-actions">
+      <button id="pe-save">Save</button>
+      <button id="pe-cancel" class="secondary">Cancel</button>
+    </div>
+  </div>
+
   <script type="module" src="live.js"></script>
 </body>
 </html>

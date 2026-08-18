@@ -9,7 +9,7 @@
 
 import { createOverlayRenderer } from "../overlay/render.js";
 import { WebHub } from "./hub.js";
-import { connectStrap } from "./strap.js";
+import { requestStrap, streamStrap, deviceIdFromName } from "./strap.js";
 
 const PROFILES_KEY = "bio-overlay-web.profiles"; // deviceId -> {name, birthYear}
 const BATTERY_LOW_PCT = 20;
@@ -53,16 +53,39 @@ function saveProfile(deviceId, profile) {
   localStorage.setItem(PROFILES_KEY, JSON.stringify(all));
 }
 
-function profileFor(deviceId, suggestedName) {
-  const existing = loadProfiles()[deviceId];
-  if (existing) return existing;
-  const name = (prompt(`Name for strap ${deviceId}?`, suggestedName) || suggestedName).trim();
-  const byRaw = prompt(`Birth year for ${name}? (blank = assume age 65)`, "");
-  const birthYear = /^\d{4}$/.test((byRaw || "").trim()) ? Number(byRaw.trim()) : null;
-  const profile = { name, birthYear };
-  saveProfile(deviceId, profile);
-  return profile;
+// ---------- profile editor (inline UI, replaces prompt dialogs) ----------
+
+const editorEl = document.getElementById("profile-editor");
+const peDevice = document.getElementById("pe-device");
+const peName = document.getElementById("pe-name");
+const peBy = document.getElementById("pe-by");
+let editorSave = null; // active Save handler, swapped per open
+
+function openProfileEditor(deviceId, profile, onSave) {
+  peDevice.textContent = deviceId;
+  peName.value = profile.name ?? "";
+  peBy.value = profile.birthYear ?? "";
+  editorSave = () => {
+    const name = peName.value.trim() || profile.name || deviceId;
+    const byRaw = peBy.value.trim();
+    const birthYear = /^\d{4}$/.test(byRaw) ? Number(byRaw) : null;
+    const updated = { name, birthYear };
+    saveProfile(deviceId, updated);
+    editorEl.classList.add("hidden");
+    onSave(updated);
+  };
+  editorEl.classList.remove("hidden");
+  peName.focus();
+  peName.select();
 }
+
+document.getElementById("pe-save").addEventListener("click", () => editorSave?.());
+document.getElementById("pe-cancel").addEventListener("click", () =>
+  editorEl.classList.add("hidden"));
+editorEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") editorSave?.();
+  if (e.key === "Escape") editorEl.classList.add("hidden");
+});
 
 // ---------- IndexedDB write-through + JSONL export ----------
 
@@ -174,47 +197,68 @@ function addStrapChip(deviceId) {
   };
 }
 
+// device.id (stable per device+origin) -> {pid, ui} — guards against
+// connecting the same strap twice, which would duplicate the chip and
+// double-count every reading via a second notification listener.
+const connected = new Map();
+
+function applyProfile(pid, ui, profile) {
+  hub.registerParticipant(pid, {
+    displayName: profile.name,
+    birthYear: profile.birthYear,
+  });
+  ui.setLabel(profile.name);
+}
+
 async function onConnectClick() {
   connectBtn.disabled = true;
   try {
-    let ui = null;
-    let pid = null;
-    const strap = await connectStrap({
-      onReading(m) {
-        if (pid) hub.reading(pid, m.bpm, m.rrIntervalsMs);
-      },
-      onStatus(text, kind) {
-        if (ui) ui.setDot(kind);
-        if (kind !== "ok") notice(`${pid ?? "strap"}: ${text}`);
-        if (pid) hub.setConnected(pid, kind === "ok");
-      },
-      onBattery(pct) {
-        if (ui) ui.setBattery(pct);
-        if (pct <= BATTERY_LOW_PCT) notice(`${pid}: battery low (${pct}%) — replace CR2025 soon`);
-      },
-    });
-    pid = strap.deviceId || strap.name;
-    const profile = profileFor(pid, strap.name.replace(/^Polar\s+/, ""));
-    hub.registerParticipant(pid, {
-      displayName: profile.name,
-      birthYear: profile.birthYear,
-    });
-    hub.setConnected(pid, true);
-    ui = addStrapChip(pid);
-    ui.setLabel(profile.name);
-    ui.setDot("ok");
+    const device = await requestStrap();
+    if (connected.has(device.id)) {
+      notice(`${connected.get(device.id).pid} is already connected`);
+      return;
+    }
+    const pid = deviceIdFromName(device.name) || device.name || device.id;
+    // Register (with any stored profile) BEFORE streaming so the first
+    // readings already carry the right display name.
+    const profile = loadProfiles()[pid] ??
+      { name: (device.name || pid).replace(/^Polar\s+/, ""), birthYear: null };
+    const ui = addStrapChip(pid);
+    connected.set(device.id, { pid, ui });
+    applyProfile(pid, ui, profile);
     // Click the chip to rename / set birth year.
-    ui.chip.addEventListener("click", () => {
-      const name = (prompt(`Name for ${pid}?`, profile.name) || profile.name).trim();
-      const byRaw = prompt(`Birth year for ${name}? (blank = assume age 65)`,
-        profile.birthYear ?? "");
-      profile.name = name;
-      profile.birthYear = /^\d{4}$/.test((byRaw || "").trim()) ? Number(byRaw.trim()) : null;
-      saveProfile(pid, profile);
-      hub.registerParticipant(pid, { displayName: name, birthYear: profile.birthYear });
-      ui.setLabel(name);
-    });
+    ui.chip.addEventListener("click", () =>
+      openProfileEditor(pid, loadProfiles()[pid] ?? profile,
+        (updated) => applyProfile(pid, ui, updated)));
+
+    try {
+      await streamStrap(device, {
+        onReading(m) {
+          hub.reading(pid, m.bpm, m.rrIntervalsMs);
+        },
+        onStatus(text, kind) {
+          ui.setDot(kind);
+          if (kind !== "ok") notice(`${pid}: ${text}`);
+          hub.setConnected(pid, kind === "ok");
+        },
+        onBattery(pct) {
+          ui.setBattery(pct);
+          if (pct <= BATTERY_LOW_PCT) notice(`${pid}: battery low (${pct}%) — replace CR2025 soon`);
+        },
+      });
+    } catch (err) {
+      // Initial connection failed: undo the chip so a retry starts clean.
+      ui.chip.remove();
+      connected.delete(device.id);
+      throw err;
+    }
+    hub.setConnected(pid, true);
     notice("");
+    // First time seeing this strap: ask for name/birth year via the inline
+    // editor (readings keep flowing under the default meanwhile).
+    if (!loadProfiles()[pid]) {
+      openProfileEditor(pid, profile, (updated) => applyProfile(pid, ui, updated));
+    }
   } catch (err) {
     if (err.name !== "NotFoundError") notice(`connect failed: ${err.message}`);
   } finally {
@@ -305,3 +349,8 @@ if (sim) startSim(Number(sim) || 2);
 
 // Render loop: 1 Hz is plenty; readings arrive ~1/s per strap anyway.
 setInterval(() => renderer.render(hub.snapshot()), 1000);
+// Dev aid: `?editor` opens the profile editor with sample data so its layout
+// can be checked (e.g. in a headless screenshot) without connecting a strap.
+if (new URLSearchParams(location.search).has("editor")) {
+  openProfileEditor("16CD9E3C", { name: "Mike", birthYear: 1960 }, () => {});
+}
