@@ -137,6 +137,13 @@ body {
   text-shadow: none;
 }
 
+.version {
+  color: #46536a;
+  font-size: 0.7rem;
+  text-shadow: none;
+  align-self: flex-end;
+}
+
 /* Strap profile editor: small centered card above the control bar. */
 #profile-editor {
   position: absolute;

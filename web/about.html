@@ -100,13 +100,16 @@
         Open source — <a href="https://github.com/mckoss/bio-overlay"
         rel="noopener">github.com/mckoss/bio-overlay</a>. A desktop app with
         an OBS-ready overlay is also available there for streaming setups.
+        <span id="version" class="version"></span>
       </p>
     </footer>
   </main>
-  <script>
+  <script type="module">
+    import { VERSION } from "./version.js";
     // Returning visitors go straight to the app (see the redirect in
     // live.js); seeing this page once is what marks them as returning.
     localStorage.setItem("bio-overlay-web.visited", "1");
+    document.getElementById("version").textContent = `v${VERSION}`;
   </script>
 </body>
 </html>
