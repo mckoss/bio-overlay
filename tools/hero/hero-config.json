@@ -1,0 +1,23 @@
+{
+  "host": "127.0.0.1",
+  "port": 8080,
+  "staleAfterSeconds": 5.0,
+  "participants": [
+    {
+      "id": "mike-koss",
+      "displayName": "Mike",
+      "deviceId": "16CD9E3C",
+      "namePrefix": "Polar H10",
+      "birthYear": 1960,
+      "maxHr": null
+    },
+    {
+      "id": "deb-koss",
+      "displayName": "Debbie",
+      "deviceId": "16CDAA3B",
+      "namePrefix": "Polar H10",
+      "birthYear": 1961,
+      "maxHr": null
+    }
+  ]
+}

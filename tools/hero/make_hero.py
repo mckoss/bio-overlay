@@ -14,8 +14,9 @@ Rerun this whenever the background image or the overlay design changes:
 
 All inputs live in this directory so the image is reproducible from the repo
 alone: gym-background.jpg (the webcam backdrop), session.jsonl (a real
-recorded workout session), and config.json (the matching participants and
-birth years, for zones). Override with --source/--config/--fraction
+recorded workout session), and hero-config.json (the matching participants
+and birth years, for zones — named to dodge the .gitignore rule that keeps
+personal config.json files out of the repo). Override with --source/--config/--fraction
 (fraction = where in the session "now" is; default 0.5 = halfway).
 
 Outputs: docs/overlay-screenshot.jpg and web/img/overlay-screenshot.jpg.
@@ -131,7 +132,7 @@ def wait_for(url: str, timeout_s: float = 15) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--source", type=Path, default=HERE / "session.jsonl")
-    ap.add_argument("--config", type=Path, default=HERE / "config.json")
+    ap.add_argument("--config", type=Path, default=HERE / "hero-config.json")
     ap.add_argument("--fraction", type=float, default=0.5)
     ap.add_argument("--venv", type=Path, default=REPO / ".venv",
                     help="venv with bio_overlay deps (e.g. the main checkout's "
