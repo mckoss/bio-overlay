@@ -87,13 +87,22 @@ Polar H10 #1 -- BLE --+
         Zoom "Share Screen → this tab" ("Optimize for video clip")
 ```
 
-Quick start (serve the **repo root**; Web Bluetooth needs localhost or https):
+**Hosted** (GitHub Pages, deployed from `main` by the Pages workflow):
+
+- Live page: **https://mckoss.com/bio-overlay/web/** (`?sim=2` for fake straps)
+- History: **https://mckoss.com/bio-overlay/web/history.html**
+
+Or serve locally from the **repo root** (Web Bluetooth needs localhost or https):
 
 ```bash
 python3 -m http.server 8090
 # live page:  http://localhost:8090/web/            (?sim=2 for fake straps)
 # history:    http://localhost:8090/web/history.html
 ```
+
+Note: history (IndexedDB) and strap profiles (localStorage) are per browser
+**and per origin** — sessions recorded on localhost don't appear on the
+hosted site, and vice versa.
 
 Click **Start camera** and **Connect strap…** (once per strap — a small
 editor asks each wearer's name and birth year the first time and remembers
