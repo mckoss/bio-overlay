@@ -3,7 +3,7 @@
  * server's /api/history endpoints.
  */
 
-import { createHistoryPage } from "./history-ui.js";
+import { createHistoryPage } from "./overlay/history-ui.js";
 
 async function checkOk(res) {
   if (!res.ok) throw new Error(await res.text());

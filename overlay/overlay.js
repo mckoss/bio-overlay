@@ -4,7 +4,7 @@
  * OBS scene reloads and computer sleep by auto-reconnecting with backoff.
  */
 
-import { createOverlayRenderer } from "./render.js";
+import { createOverlayRenderer } from "./overlay/render.js";
 
 const WS_PATH = "/ws";
 const RECONNECT_MIN_MS = 500;

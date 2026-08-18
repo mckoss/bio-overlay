@@ -26,9 +26,13 @@ _icns = ROOT / "packaging" / "icon.icns"
 EXE_ICON = str(_ico) if sys.platform == "win32" and _ico.exists() else None
 APP_ICON = str(_icns) if _icns.exists() else None
 
-# Bundle the overlay/ static assets; server._overlay_dir() reads them from
-# sys._MEIPASS/overlay at runtime.
-datas = [(str(ROOT / "overlay"), "overlay")]
+# Bundle the static assets: overlay/ (desktop pages) and web/overlay/ (the
+# shared modules, owned by the web version); server._static_root() reads both
+# from sys._MEIPASS at runtime.
+datas = [
+    (str(ROOT / "overlay"), "overlay"),
+    (str(ROOT / "web" / "overlay"), "web/overlay"),
+]
 for pkg in ("bleak", "aiohttp"):
     try:
         datas += copy_metadata(pkg)

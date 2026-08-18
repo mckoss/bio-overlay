@@ -46,15 +46,18 @@ class PortInUseError(Exception):
         super().__init__(f"port {port} unavailable")
 
 
-def _overlay_dir() -> Path:
-    """Locate the overlay/ static assets in dev and in a PyInstaller bundle."""
+def _static_root() -> Path:
+    """Repo root in dev, or the bundle root in a PyInstaller bundle."""
     base = getattr(sys, "_MEIPASS", None)
-    if base:  # bundled: assets are added under <bundle>/overlay
-        return Path(base) / "overlay"
-    return Path(__file__).resolve().parents[2] / "overlay"
+    return Path(base) if base else Path(__file__).resolve().parents[2]
 
 
-OVERLAY_DIR = _overlay_dir()
+# Desktop pages (index/config/history HTML + their glue js/css).
+OVERLAY_DIR = _static_root() / "overlay"
+# Modules/styles shared with the web version (which owns them, so its static
+# hosting needs no path tricks); the desktop pages reference them as
+# "overlay/…", served from /overlay/ below.
+SHARED_DIR = _static_root() / "web" / "overlay"
 
 
 async def _ws_handler(request: web.Request) -> web.WebSocketResponse:
@@ -325,6 +328,9 @@ def build_app(
             web.post("/api/quit", _quit),
         ]
     )
+    # Shared modules (render.js, history-ui.js, css) live with the web
+    # version; serve them where the desktop pages expect them.
+    app.router.add_static("/overlay/", SHARED_DIR, show_index=False)
     # Serve remaining overlay assets (css/js) as static files.
     app.router.add_static("/", OVERLAY_DIR, show_index=False)
     return app
