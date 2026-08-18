@@ -12,6 +12,9 @@ import { WebHub } from "./hub.js";
 import { requestStrap, streamStrap, deviceIdFromName } from "./strap.js";
 import { openDb, addReading, localDay } from "./db.js";
 import { loadProfiles, saveProfile } from "./profiles.js";
+import { VERSION } from "./version.js";
+
+document.getElementById("version").textContent = `v${VERSION}`;
 
 // First-time visitors land on the about page instead of a bare app. Skipped
 // whenever a query param is present (?sim / ?editor / ?reset — tests and

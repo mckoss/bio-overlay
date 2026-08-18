@@ -87,3 +87,8 @@ footer {
   color: #8b98a9;
   font-size: 0.9rem;
 }
+
+footer .version {
+  color: #46536a;
+  font-size: 0.8rem;
+}
