@@ -13,6 +13,17 @@ import { requestStrap, streamStrap, deviceIdFromName } from "./strap.js";
 import { openDb, addReading, getAllReadings, localDay } from "./db.js";
 import { loadProfiles, saveProfile } from "./profiles.js";
 
+// First-time visitors land on the about page instead of a bare app. Skipped
+// whenever a query param is present (?sim / ?editor / ?reset — tests and
+// dev) and once the visitor has been here before or has strap profiles.
+const VISITED_KEY = "bio-overlay-web.visited";
+if (!location.search && !localStorage.getItem(VISITED_KEY) &&
+    !Object.keys(loadProfiles()).length) {
+  location.replace("about.html");
+} else {
+  localStorage.setItem(VISITED_KEY, "1");
+}
+
 const BATTERY_LOW_PCT = 20;
 const BAR_HIDE_MS = 5000;
 

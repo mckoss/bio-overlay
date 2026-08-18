@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>bio-overlay · about</title>
+  <meta name="description"
+    content="Live heart-rate overlay on your video for remote training sessions — no install, runs in Chrome with a Bluetooth chest strap." />
+  <link rel="stylesheet" href="about.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <h1>bio-overlay</h1>
+      <p class="tagline">
+        Your live heart rate, on your video, for remote training sessions —
+        right in the browser. Nothing to install.
+      </p>
+      <p class="cta-row">
+        <a class="cta" href="./">Open the app</a>
+        <a class="cta secondary" href="history.html">Session history</a>
+      </p>
+      <img class="shot" src="img/overlay-screenshot.png"
+        alt="Two participant cards with live BPM colored by intensity zone,
+             banded sparklines, time-in-zone bars, and a session clock" />
+      <p class="caption">A real session: live BPM colored by training zone, a
+        5-minute sparkline over the zone bands, whole-session stats, and
+        time-in-zone bars.</p>
+    </header>
+
+    <section>
+      <h2>What it does</h2>
+      <p>
+        bio-overlay reads your heart rate from a Bluetooth chest strap and
+        shows it as an overlay on your webcam video — live BPM, training
+        zone (Z1–Z5), a rolling sparkline, and session min/avg/max. Share
+        the tab in Zoom and your trainer sees your effort in real time,
+        composited right on your video. Works for one or two people (two
+        straps) in the same room.
+      </p>
+      <p>
+        Every workout is recorded in your browser: the
+        <a href="history.html">history page</a> lists past sessions with
+        time-in-zone bars and a full-workout chart, and you can export any
+        day as a JSONL file.
+      </p>
+    </section>
+
+    <section>
+      <h2>What you need</h2>
+      <ul>
+        <li>
+          <b>A Bluetooth heart-rate chest strap.</b> We recommend the
+          <a href="https://www.amazon.com/s?k=polar+h10+heart+rate+monitor"
+             rel="noopener">Polar&nbsp;H10 (Amazon)</a> — it's what this app
+          is developed and tested with, and it allows two apps to connect at
+          once. Any strap that speaks the standard Bluetooth Heart Rate
+          service should also work (Garmin HRM-Dual, Wahoo TICKR, and
+          similar). Arm/wrist optical sensors vary — chest straps are the
+          reliable choice. Tip: straps take a common
+          <b>CR2025</b> coin battery; keep a spare.
+        </li>
+        <li>
+          <b>Chrome or Edge on a computer</b> (Mac, Windows, or Linux).
+          Safari and Firefox don't support Web Bluetooth, and no iPhone/iPad
+          browser does. An Android device with Chrome also works.
+        </li>
+        <li><b>Zoom</b> (or any app that can share a screen/tab) if a
+          trainer is watching remotely.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>How to use it</h2>
+      <ol>
+        <li><b>Put the strap on</b> — moisten the electrode pads; the strap
+          only wakes up on skin contact.</li>
+        <li><b><a href="./">Open the app</a></b>, click <i>Start camera</i>
+          and <i>Connect strap…</i>, and pick your strap from the chooser.
+          First time, your browser asks once for camera and Bluetooth
+          access, and the app asks your name and birth year (birth year
+          sets your personal training zones).</li>
+        <li><b>In Zoom:</b> <i>Share Screen → this Chrome tab</i>, and tick
+          <i>“Optimize for video clip”</i> so motion stays smooth. That's
+          it — no OBS, no virtual camera.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Your data stays with you</h2>
+      <p>
+        There's no account and no server: heart-rate readings go from the
+        strap to your browser and are stored only there (and can be deleted
+        from the history page). Nothing is uploaded.
+      </p>
+    </section>
+
+    <footer>
+      <p>
+        Open source — <a href="https://github.com/mckoss/bio-overlay"
+        rel="noopener">github.com/mckoss/bio-overlay</a>. A desktop app with
+        an OBS-ready overlay is also available there for streaming setups.
+      </p>
+    </footer>
+  </main>
+  <script>
+    // Returning visitors go straight to the app (see the redirect in
+    // live.js); seeing this page once is what marks them as returning.
+    localStorage.setItem("bio-overlay-web.visited", "1");
+  </script>
+</body>
+</html>
