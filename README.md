@@ -91,8 +91,8 @@ Quick start (serve the **repo root**; Web Bluetooth needs localhost or https):
 
 ```bash
 python3 -m http.server 8090
-# live page:  http://localhost:8090/web/live.html   (?sim=2 for fake straps)
-# BLE test:   http://localhost:8090/web/
+# live page:  http://localhost:8090/web/            (?sim=2 for fake straps)
+# history:    http://localhost:8090/web/history.html
 ```
 
 Click **Start camera** and **Connect strap…** (once per strap — a small

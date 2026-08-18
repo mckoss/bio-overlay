@@ -1,296 +1,54 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>bio-overlay Web BLE spike</title>
-<style>
-  :root {
-    --bg: #10141a;
-    --tile: #1a212b;
-    --text: #e8edf4;
-    --dim: #8b98a9;
-    --accent: #4fc3f7;
-    --ok: #66bb6a;
-    --warn: #ffa726;
-    --err: #ef5350;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    padding: 1.5rem;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, "Helvetica Neue", sans-serif;
-  }
-  h1 { font-size: 1.2rem; margin: 0 0 0.25rem; }
-  .sub { color: var(--dim); font-size: 0.85rem; margin-bottom: 1rem; }
-  .controls { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem; }
-  button {
-    background: var(--accent);
-    border: none;
-    color: #08222e;
-    font-weight: 600;
-    font-size: 0.95rem;
-    padding: 0.55rem 1.1rem;
-    border-radius: 8px;
-    cursor: pointer;
-  }
-  button.secondary { background: #2c3846; color: var(--text); }
-  button:disabled { opacity: 0.4; cursor: default; }
-  #support { font-size: 0.85rem; }
-  #support.ok { color: var(--ok); }
-  #support.bad { color: var(--err); }
-  #tiles { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
-  .tile {
-    background: var(--tile);
-    border-radius: 12px;
-    padding: 1rem 1.25rem;
-    min-width: 270px;
-    border: 1px solid #263140;
-  }
-  .tile h2 { font-size: 0.95rem; margin: 0; }
-  .tile .device-id { color: var(--dim); font-size: 0.8rem; margin-bottom: 0.5rem; }
-  .bpm { font-size: 3.2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-  .bpm small { font-size: 1rem; color: var(--dim); font-weight: 400; }
-  .status { font-size: 0.8rem; margin: 0.35rem 0; }
-  .status .dot { display: inline-block; width: 0.6em; height: 0.6em; border-radius: 50%; margin-right: 0.35em; }
-  .dot.ok { background: var(--ok); }
-  .dot.warn { background: var(--warn); }
-  .dot.err { background: var(--err); }
-  .meta { color: var(--dim); font-size: 0.78rem; line-height: 1.5; font-variant-numeric: tabular-nums; }
-  .meta .rr { color: var(--text); }
-  #log {
-    background: #0b0e13;
-    border: 1px solid #263140;
-    border-radius: 8px;
-    padding: 0.6rem 0.8rem;
-    font: 0.75rem/1.5 ui-monospace, Menlo, monospace;
-    height: 14rem;
-    overflow-y: auto;
-    white-space: pre-wrap;
-  }
-  #log .err { color: var(--err); }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>bio-overlay live</title>
+  <link rel="stylesheet" href="../overlay/overlay.css" />
+  <link rel="stylesheet" href="live.css" />
 </head>
 <body>
-<h1>bio-overlay — Web Bluetooth spike</h1>
-<div class="sub">
-  Phase 0: verify browser-only strap connectivity on Mac Chrome —
-  chooser flow, RR intervals, dual straps, reconnect.
-</div>
+  <!--
+    Camera + overlay compositing page: your webcam with the live HR overlay
+    drawn on top. Share THIS TAB in Zoom (tick "Optimize for video clip")
+    instead of running OBS. See web/README.md.
+  -->
+  <video id="camera" autoplay playsinline muted></video>
+  <div id="camera-off">camera off</div>
 
-<div class="controls">
-  <button id="connect">Connect strap…</button>
-  <button id="export" class="secondary" disabled>Download JSONL</button>
-  <span id="support"></span>
-</div>
+  <!-- Overlay host elements, styled by ../overlay/overlay.css -->
+  <div id="panels" class="panels"></div>
+  <div id="session-clock" class="session-clock"></div>
 
-<div id="tiles"></div>
-<div id="log"></div>
+  <!-- Control bar: auto-hides when the mouse leaves / goes idle so it never
+       shows up in the shared tab during a session. -->
+  <div id="bar">
+    <button id="connect">Connect strap…</button>
+    <button id="camera-btn" class="secondary">Start camera</button>
+    <button id="mirror-btn" class="secondary">Mirror</button>
+    <button id="new-session" class="secondary">New session</button>
+    <button id="export" class="secondary" disabled>Download JSONL</button>
+    <a id="history-link" href="history.html" target="_blank" rel="noopener">History</a>
+    <span id="straps"></span>
+    <span id="notice"></span>
+  </div>
 
-<script type="module">
-import { parseHrMeasurement } from "./hr-parser.js";
+  <!-- Inline strap profile editor: opens when a new strap connects, or when
+       a strap chip is clicked. Persists to localStorage. -->
+  <div id="profile-editor" class="hidden">
+    <div class="pe-title">Strap <span id="pe-device"></span></div>
+    <label>Name
+      <input id="pe-name" type="text" autocomplete="off" />
+    </label>
+    <label>Birth year <span class="pe-hint">(for zones; blank assumes age 65)</span>
+      <input id="pe-by" type="number" min="1900" max="2026" placeholder="e.g. 1960" />
+    </label>
+    <div class="pe-actions">
+      <button id="pe-save">Save</button>
+      <button id="pe-cancel" class="secondary">Cancel</button>
+    </div>
+  </div>
 
-const HR_SERVICE = "heart_rate"; // 0x180D
-const HR_MEASUREMENT = "heart_rate_measurement"; // 0x2A37
-const BATTERY_SERVICE = "battery_service"; // 0x180F
-const BATTERY_LEVEL = "battery_level"; // 0x2A19
-const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 8000, 8000];
-
-const logEl = document.getElementById("log");
-const tilesEl = document.getElementById("tiles");
-const supportEl = document.getElementById("support");
-const connectBtn = document.getElementById("connect");
-const exportBtn = document.getElementById("export");
-
-// Captured readings across all straps, exportable as JSONL to prove the
-// data path end-to-end (format mirrors the desktop app's history lines).
-const captured = [];
-let sessionStart = null;
-
-function log(msg, isError = false) {
-  const line = document.createElement("div");
-  if (isError) line.className = "err";
-  line.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
-  logEl.appendChild(line);
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
-// "Polar H10 16CD9E3C" -> "16CD9E3C" (mirrors ble_collector.device_id_from_name).
-function deviceIdFromName(name) {
-  const parts = (name || "").split(/\s+/).filter(Boolean);
-  if (parts.length >= 2 && !["H10", "?"].includes(parts[parts.length - 1])) {
-    return parts[parts.length - 1];
-  }
-  return null;
-}
-
-class StrapTile {
-  constructor(device) {
-    this.device = device;
-    this.index = tilesEl.children.length;
-    this.notifications = 0;
-    this.windowTimes = []; // notification timestamps for rate display
-    this.intentionalDisconnect = false;
-
-    this.el = document.createElement("div");
-    this.el.className = "tile";
-    this.el.innerHTML = `
-      <h2></h2>
-      <div class="device-id"></div>
-      <div class="bpm">–<small> bpm</small></div>
-      <div class="status"><span class="dot warn"></span><span class="status-text">connecting…</span></div>
-      <div class="meta">
-        <div>RR: <span class="rr">–</span></div>
-        <div>contact: <span class="contact">–</span> · battery: <span class="battery">–</span></div>
-        <div><span class="count">0</span> notifications · <span class="rate">–</span>/s</div>
-      </div>
-      <div style="margin-top:0.6rem"><button class="secondary disconnect">Disconnect</button></div>
-    `;
-    this.el.querySelector("h2").textContent = device.name || "(unnamed)";
-    this.el.querySelector(".device-id").textContent =
-      `deviceId: ${deviceIdFromName(device.name) ?? "?"} · gatt id: ${device.id.slice(0, 12)}…`;
-    this.el.querySelector(".disconnect").addEventListener("click", () => {
-      this.intentionalDisconnect = true;
-      this.device.gatt.disconnect();
-    });
-    tilesEl.appendChild(this.el);
-
-    device.addEventListener("gattserverdisconnected", () => this.onDisconnected());
-  }
-
-  setStatus(kind, text) {
-    this.el.querySelector(".dot").className = `dot ${kind}`;
-    this.el.querySelector(".status-text").textContent = text;
-  }
-
-  async connect() {
-    const server = await this.device.gatt.connect();
-    const hr = await server.getPrimaryService(HR_SERVICE);
-    const chr = await hr.getCharacteristic(HR_MEASUREMENT);
-    chr.addEventListener("characteristicvaluechanged", (e) => this.onNotification(e));
-    await chr.startNotifications();
-    this.setStatus("ok", "connected, notifications on");
-    log(`${this.device.name}: connected, HR notifications started`);
-    this.readBattery(server); // fire-and-forget; battery is a nicety
-  }
-
-  async readBattery(server) {
-    try {
-      const svc = await server.getPrimaryService(BATTERY_SERVICE);
-      const level = await (await svc.getCharacteristic(BATTERY_LEVEL)).readValue();
-      this.el.querySelector(".battery").textContent = `${level.getUint8(0)}%`;
-    } catch {
-      this.el.querySelector(".battery").textContent = "n/a";
-    }
-  }
-
-  onNotification(event) {
-    let m;
-    try {
-      m = parseHrMeasurement(event.target.value);
-    } catch (err) {
-      log(`${this.device.name}: parse error: ${err.message}`, true);
-      return;
-    }
-    this.notifications += 1;
-    const now = performance.now();
-    this.windowTimes.push(now);
-    while (this.windowTimes.length && now - this.windowTimes[0] > 10_000) {
-      this.windowTimes.shift();
-    }
-
-    this.el.querySelector(".bpm").innerHTML = `${m.bpm}<small> bpm</small>`;
-    this.el.querySelector(".rr").textContent = m.rrIntervalsMs.length
-      ? m.rrIntervalsMs.map((v) => v.toFixed(1)).join(", ") + " ms"
-      : "(none)";
-    this.el.querySelector(".contact").textContent =
-      m.sensorContact === null ? "n/a" : m.sensorContact ? "yes" : "NO";
-    this.el.querySelector(".count").textContent = String(this.notifications);
-    const span = (now - this.windowTimes[0]) / 1000;
-    this.el.querySelector(".rate").textContent =
-      this.windowTimes.length > 1 ? ((this.windowTimes.length - 1) / span).toFixed(1) : "–";
-
-    if (sessionStart === null) sessionStart = Date.now();
-    captured.push({
-      s: Math.round((Date.now() - sessionStart) / 1000),
-      p: this.index,
-      bpm: m.bpm,
-      rr: m.rrIntervalsMs.map((v) => Math.round(v * 10) / 10),
-    });
-    exportBtn.disabled = false;
-  }
-
-  async onDisconnected() {
-    if (this.intentionalDisconnect) {
-      this.setStatus("err", "disconnected");
-      log(`${this.device.name}: disconnected (by user)`);
-      return;
-    }
-    log(`${this.device.name}: connection lost, reconnecting…`, true);
-    for (const [attempt, delay] of RECONNECT_DELAYS_MS.entries()) {
-      this.setStatus("warn", `reconnecting (attempt ${attempt + 1})…`);
-      try {
-        await this.connect();
-        log(`${this.device.name}: reconnected`);
-        return;
-      } catch (err) {
-        log(`${this.device.name}: reconnect attempt ${attempt + 1} failed: ${err.message}`, true);
-        await new Promise((r) => setTimeout(r, delay));
-      }
-    }
-    this.setStatus("err", "gave up reconnecting");
-    log(`${this.device.name}: gave up after ${RECONNECT_DELAYS_MS.length} attempts`, true);
-  }
-}
-
-async function connectStrap() {
-  connectBtn.disabled = true;
-  try {
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [HR_SERVICE] }],
-      optionalServices: [BATTERY_SERVICE],
-    });
-    log(`chooser: selected "${device.name}"`);
-    const tile = new StrapTile(device);
-    try {
-      await tile.connect();
-    } catch (err) {
-      tile.setStatus("err", `connect failed: ${err.message}`);
-      log(`${device.name}: connect failed: ${err.message}`, true);
-    }
-  } catch (err) {
-    // NotFoundError = user dismissed the chooser; not a failure worth alarming.
-    if (err.name === "NotFoundError") log("chooser dismissed");
-    else log(`requestDevice failed: ${err.name}: ${err.message}`, true);
-  } finally {
-    connectBtn.disabled = false;
-  }
-}
-
-function exportJsonl() {
-  const lines = captured.map((r) => JSON.stringify(r)).join("\n") + "\n";
-  const blob = new Blob([lines], { type: "application/jsonl" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `web-spike-${new Date().toISOString().slice(0, 10)}.jsonl`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-if (navigator.bluetooth) {
-  supportEl.className = "ok";
-  supportEl.textContent = "✓ Web Bluetooth available";
-  connectBtn.addEventListener("click", connectStrap);
-  exportBtn.addEventListener("click", exportJsonl);
-  log("ready — click “Connect strap…” (repeat for a second strap)");
-} else {
-  supportEl.className = "bad";
-  supportEl.textContent = "✗ Web Bluetooth NOT available in this browser";
-  connectBtn.disabled = true;
-  log("navigator.bluetooth is undefined — use Chrome/Edge over https or localhost", true);
-}
-</script>
+  <script type="module" src="live.js"></script>
 </body>
 </html>

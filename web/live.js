@@ -10,12 +10,11 @@
 import { createOverlayRenderer } from "../overlay/render.js";
 import { WebHub } from "./hub.js";
 import { requestStrap, streamStrap, deviceIdFromName } from "./strap.js";
+import { openDb, addReading, getAllReadings, localDay } from "./db.js";
+import { loadProfiles, saveProfile } from "./profiles.js";
 
-const PROFILES_KEY = "bio-overlay-web.profiles"; // deviceId -> {name, birthYear}
 const BATTERY_LOW_PCT = 20;
 const BAR_HIDE_MS = 5000;
-const DB_NAME = "bio-overlay-web";
-const DB_STORE = "readings";
 
 const hub = new WebHub();
 const renderer = createOverlayRenderer({
@@ -35,22 +34,6 @@ const exportBtn = document.getElementById("export");
 
 function notice(msg) {
   noticeEl.textContent = msg;
-}
-
-// ---------- participant profiles (name + birth year per strap) ----------
-
-function loadProfiles() {
-  try {
-    return JSON.parse(localStorage.getItem(PROFILES_KEY)) || {};
-  } catch {
-    return {};
-  }
-}
-
-function saveProfile(deviceId, profile) {
-  const all = loadProfiles();
-  all[deviceId] = profile;
-  localStorage.setItem(PROFILES_KEY, JSON.stringify(all));
 }
 
 // ---------- profile editor (inline UI, replaces prompt dialogs) ----------
@@ -89,36 +72,16 @@ editorEl.addEventListener("keydown", (e) => {
 
 // ---------- IndexedDB write-through + JSONL export ----------
 
-function openDb() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const store = req.result.createObjectStore(DB_STORE, { autoIncrement: true });
-      store.createIndex("day", "day");
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
 const dbPromise = openDb().catch((err) => {
   notice(`IndexedDB unavailable: ${err?.message ?? err}`);
   return null;
 });
 
-function localDay(atMs) {
-  const d = new Date(atMs);
-  return (
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-` +
-    String(d.getDate()).padStart(2, "0")
-  );
-}
-
 hub.onReading(async ({ id, index, bpm, rrMs, atMs }) => {
   const db = await dbPromise;
   if (!db) return;
   const p = hub.participants.get(id);
-  db.transaction(DB_STORE, "readwrite").objectStore(DB_STORE).add({
+  addReading(db, {
     day: localDay(atMs),
     sessionStart: hub.sessionStartedAtMs,
     pid: id,
@@ -135,15 +98,7 @@ async function exportJsonl() {
   const db = await dbPromise;
   if (!db) return;
   const today = localDay(Date.now());
-  const rows = await new Promise((resolve, reject) => {
-    const req = db
-      .transaction(DB_STORE)
-      .objectStore(DB_STORE)
-      .index("day")
-      .getAll(today);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+  const rows = await getAllReadings(db, today);
   if (!rows.length) return;
 
   // Desktop history format: a session header line, then compact reading lines
