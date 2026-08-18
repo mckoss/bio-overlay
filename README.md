@@ -9,11 +9,26 @@ composited over a dark backdrop standing in for
 video](docs/overlay-screenshot.png)
 
 bio-overlay reads live heart-rate data from up to two Polar BLE chest straps in
-one location, renders those metrics as a transparent browser overlay, and lets
-OBS composite that overlay onto your video and send it to a remote trainer
-through Zoom (or any app that can select a camera).
+one location, renders those metrics as an overlay on your video, and gets that
+picture to a remote trainer through Zoom.
 
-## How it works
+It comes in **two versions**:
+
+| | **Desktop app** (Python) | **Web version** (experimental) |
+| --- | --- | --- |
+| Install | Download the app (or run from source) | None — open a page in Chrome |
+| Strap connection | Native BLE (bleak) | Web Bluetooth, in the browser |
+| Compositing | OBS Browser Source + Virtual Camera | The page itself (camera + overlay in one tab) |
+| Into Zoom | Select "OBS Virtual Camera" | Share the tab (Screen Share) |
+| History | Daily JSONL files on disk | IndexedDB + JSONL export |
+| Browsers/OS | macOS & Windows app; overlay in any browser/OBS | Chrome/Edge only (no Safari/Firefox/iOS) |
+| Status | Stable, released | Experimental — see [web/README.md](web/README.md) |
+
+Most of this README documents the **desktop app**. For the web version — which
+removes the app download, the unsigned-app permission dance, and OBS entirely —
+see [Web version (experimental)](#web-version-experimental) below.
+
+## How the desktop app works
 
 ```text
 Polar H10 #1 -- BLE --+
@@ -47,13 +62,54 @@ Working end-to-end and verified against a real Polar H10:
 3. ✅ Local WebSocket telemetry server + transparent overlay with sparkline/stats.
 4. ✅ Server-side session history (survives overlay/OBS reloads) + daily history file.
 5. ✅ Simulator for hardware-free development.
-6. ⏳ Two straps at once (single-strap proven; dual-strap reliability still to test).
+6. ✅ Two straps at once (dual-strap workouts recorded end-to-end; note a
+   Polar H10 accepts two BLE connections, so the desktop app and the web
+   version can even stream the same strap simultaneously).
 
 An experimental estimated breathing rate (from RR-interval variation) can also
 be shown on each card, labeled EST — it is **off by default** and enabled with
 `--respire-experiment`; see [Respiration](#respiration-experimental).
 
-## Download
+## Web version (experimental)
+
+The `web/` directory holds a browser-only bio-overlay: **no app install, no
+OBS**. A single page connects to the straps with Web Bluetooth, shows your
+webcam with the same overlay cards composited on top, and you share that tab
+in Zoom.
+
+```text
+Polar H10 #1 -- BLE --+
+                      |   (Web Bluetooth)
+                      v
+                 Chrome tab:  camera + overlay cards   ──> IndexedDB history
+                      |                                     (+ JSONL export)
+                      v
+        Zoom "Share Screen → this tab" ("Optimize for video clip")
+```
+
+Quick start (serve the **repo root**; Web Bluetooth needs localhost or https):
+
+```bash
+python3 -m http.server 8090
+# live page:  http://localhost:8090/web/live.html   (?sim=2 for fake straps)
+# BLE test:   http://localhost:8090/web/
+```
+
+Click **Start camera** and **Connect strap…** (once per strap — a small
+editor asks each wearer's name and birth year the first time and remembers
+them). In Zoom, **Share Screen → that Chrome tab** and tick **"Optimize for
+video clip"**. The trainer sees your video with live BPM, zone, sparkline,
+and session stats — no OBS, no virtual camera.
+
+The web version shares the desktop app's overlay renderer
+(`overlay/render.js`) and mirrors its zone math and session accounting, so
+the cards look and behave identically. Limitations: Chrome/Edge only (Safari,
+Firefox, and all iOS browsers lack Web Bluetooth), straps are re-picked from
+the chooser each visit, and history lives in the browser (IndexedDB) with a
+JSONL export in the desktop format. Roadmap (static hosting, then a hosted
+trainer/client version): [web/README.md](web/README.md).
+
+## Download (desktop app)
 
 Prebuilt apps for **macOS (Apple Silicon)** and **Windows (x64)** are attached
 to each [GitHub Release](https://github.com/mckoss/bio-overlay/releases). With no
@@ -389,7 +445,11 @@ Keep the tag in sync with the `version` in `pyproject.toml` / `__init__.py`.
 
 ## Non-Goals
 
-- Replacing OBS or Zoom.
-- Cloud telemetry (all data stays local; the daily history file is local and
-  git-ignored, and can be disabled with `--no-history`).
+- Replacing Zoom (the desktop app also doesn't replace OBS; the web version
+  does make OBS unnecessary by compositing in the browser).
+- Cloud telemetry — in the current versions all data stays local: the desktop
+  app's daily history file is local and git-ignored (disable with
+  `--no-history`), and the web version stores history in the browser. (A
+  hosted trainer/client version is on the web roadmap and will revisit this —
+  see [web/README.md](web/README.md).)
 - Medical-grade biometric analysis.
