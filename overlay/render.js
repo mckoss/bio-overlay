@@ -1,0 +1,339 @@
+/*
+ * Stateless overlay renderer, shared by the desktop overlay (overlay.js, fed
+ * by the telemetry WebSocket) and the web version (web/live.js, fed by a
+ * browser-side hub). Everything here renders a full `state` snapshot:
+ *
+ *   { sessionStartedAt: ISO string | null,
+ *     participants: [{ participantId, displayName, active, connected, stale,
+ *                      bpm, zones, zoneTimesMs, samples, session, respiration }] }
+ *
+ * Each panel shows the live BPM, a sparkline of the last 5 minutes (with the
+ * window's min/max), and whole-session min/avg/max. The state producer is the
+ * source of truth for history: every snapshot carries the sparkline samples
+ * and session stats, so this renderer is stateless and a page/OBS reload
+ * restores the full sparkline and stats immediately.
+ */
+
+// Sparkline window and geometry (viewBox units; CSS sizes the element).
+const WINDOW_MS = 5 * 60 * 1000;
+// The zone-time bar's full width represents at least this much time.
+const ZONEBAR_MIN_SCALE_MS = 60 * 60 * 1000;
+const SPARK_W = 192;
+const SPARK_H = 48;
+const SPARK_PAD_Y = 5;
+
+// Intensity zones (from the state producer: Tanaka HRmax + band divisors).
+const ZONE_NAMES = ["rest", "z1", "z2", "z3", "z4", "z5", "over"];
+const ZONE_LABELS = {
+  rest: "Rest",
+  z1: "Z1: Recovery",
+  z2: "Z2: Endurance",
+  z3: "Z3: Aerobic",
+  z4: "Z4: Threshold",
+  z5: "Z5: Peak",
+  over: "SUPERMAX",
+};
+
+// Experimental respiration is hidden below this confidence to avoid showing
+// misleading numbers when the RSA signal is weak (e.g. during hard effort).
+const RESP_MIN_CONFIDENCE = 0.2;
+
+/**
+ * Create a renderer bound to host elements.
+ *
+ * @param {{panelsEl: Element, clockEl: Element}} els
+ * @returns {{render: (state: object) => void}}
+ */
+export function createOverlayRenderer({ panelsEl, clockEl }) {
+  // participantId -> { root, nameEl, bpmEl, sparkEl, ... }
+  const panels = new Map();
+
+  // Session clock: "Start: HH:MM · Duration: N minutes" at the bottom center.
+  let sessionStartedAt = null;
+  let clockVisible = false;
+
+  function ensurePanel(participantId) {
+    let panel = panels.get(participantId);
+    if (panel) return panel;
+
+    const root = el("div", "panel");
+    const nameEl = el("div", "name");
+
+    const live = el("div", "live");
+    const bpmEl = el("div", "bpm", "--");
+    const unitEl = el("div", "unit", "BPM");
+    live.append(bpmEl, unitEl);
+
+    // The sparkline sits beside the name AND the live BPM (grid area spans
+    // both rows) so the chart gets as much vertical space as possible.
+    const spark = el("div", "spark");
+    const sparkEl = el("div", "spark-svg");
+    const boundsEl = el("div", "spark-bounds");
+    spark.append(sparkEl, boundsEl);
+
+    const sessionEl = el("div", "session");
+    const respEl = el("div", "resp");
+    // The zone chip shares the bottom row with the "no signal" badge: the chip
+    // only shows with a live signal, the badge only without one. The zone-time
+    // bar sits in the right half of that same row.
+    const zoneEl = el("div", "zone");
+    const zoneBarEl = el("div", "zonebar");
+    const zoneWarnEl = el("div", "zone-warn");
+    const badgeEl = el("div", "badge");
+
+    root.append(nameEl, live, spark, sessionEl, respEl, zoneEl, zoneBarEl, zoneWarnEl, badgeEl);
+    panelsEl.appendChild(root);
+
+    panel = {
+      root, nameEl, bpmEl, zoneEl, zoneBarEl, zoneWarnEl,
+      sparkEl, boundsEl, sessionEl, respEl, badgeEl,
+    };
+    panels.set(participantId, panel);
+    return panel;
+  }
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function renderParticipant(p) {
+    const panel = ensurePanel(p.participantId);
+    panel.nameEl.textContent = p.displayName;
+
+    // bpm == 0 is the H10 reporting "no heartbeat detected" (loose contact).
+    const live = p.connected && !p.stale && p.bpm != null && p.bpm > 0;
+    panel.root.classList.toggle("stale", !live);
+
+    if (p.bpm != null) {
+      panel.bpmEl.textContent = String(p.bpm);
+      const beatSeconds = Math.max(0.3, Math.min(2, 60 / Math.max(p.bpm, 1)));
+      panel.root.style.setProperty("--beat", `${beatSeconds}s`);
+    } else {
+      panel.bpmEl.textContent = "--";
+    }
+
+    // The big number and the chip both take the current zone's color.
+    const zone = live ? zoneFor(p.bpm, p.zones) : null;
+    panel.bpmEl.className = "bpm" + (zone ? " " + zone : "");
+    renderZoneChip(panel, zone);
+    renderZoneBar(panel, p.zoneTimesMs);
+    // Warn when zones are running on the default assumed age (no birth year
+    // or max HR configured for this participant).
+    panel.zoneWarnEl.textContent =
+      p.zones && p.zones.assumedAge ? `zones assume age ${p.zones.assumedAge}` : "";
+    // History comes from the state producer, so a reload restores it immediately.
+    renderSparkline(panel, p.samples || [], p.zones);
+    renderSession(panel, p.session);
+    renderRespiration(panel, p.respiration);
+    panel.badgeEl.textContent = "";
+  }
+
+  function zoneFor(bpm, zones) {
+    if (bpm == null || !zones || !Array.isArray(zones.divisors)) return null;
+    // divisors: [rest|z1, z1|z2, z2|z3, z3|z4, z4|z5, z5|over] — the last one
+    // is HRmax itself (inclusive).
+    const d = zones.divisors;
+    for (let i = 0; i < d.length - 1; i++) {
+      if (bpm < d[i]) return ZONE_NAMES[i];
+    }
+    return bpm <= d[d.length - 1] ? ZONE_NAMES[d.length - 1] : "over";
+  }
+
+  function renderZoneChip(panel, zone) {
+    panel.zoneEl.textContent = zone ? ZONE_LABELS[zone] : "";
+    panel.zoneEl.className = "zone" + (zone ? " " + zone : "");
+  }
+
+  // Stacked bar of session time per zone (producer-accumulated), left-aligned
+  // in the right half of the bottom row, with the elapsed minutes at its end.
+  // The bar is scaled against max(1 hour, session duration): it grows to the
+  // right (label riding along) until the 1-hour mark, after which it spans
+  // the available width and only the proportions change. Only zone colors are
+  // drawn — there is no track for the "unused" remainder.
+  function renderZoneBar(panel, timesMs) {
+    if (!timesMs || !sessionStartedAt || !timesMs.some((t) => t > 0)) {
+      panel.zoneBarEl.innerHTML = "";
+      return;
+    }
+    const elapsedMs = Date.now() - sessionStartedAt;
+    const scaleMs = Math.max(ZONEBAR_MIN_SCALE_MS, elapsedMs);
+    const trackedMs = timesMs.reduce((a, b) => a + b, 0);
+    const segs = timesMs
+      .map((t, i) => ({ t, name: ZONE_NAMES[i] }))
+      .filter((s) => s.t > 0)
+      .map((s) => `<span class="seg ${s.name}" style="flex-grow:${s.t}"></span>`)
+      .join("");
+    const mins = Math.floor(elapsedMs / 60000);
+    panel.zoneBarEl.innerHTML =
+      `<span class="segs" style="width:${((trackedMs / scaleMs) * 100).toFixed(2)}%">${segs}</span>` +
+      `<span class="mins">${mins} min</span>`;
+  }
+
+  function renderRespiration(panel, resp) {
+    if (!resp || resp.breathsPerMin == null || resp.confidence < RESP_MIN_CONFIDENCE) {
+      panel.respEl.innerHTML = "";
+      return;
+    }
+    panel.respEl.innerHTML =
+      `<span>resp</span>` +
+      `<span><b>${resp.breathsPerMin.toFixed(0)}</b> br/min</span>` +
+      `<span class="est">est</span>`;
+  }
+
+  // With zones, the y-axis is FIXED to the participant's heart-rate range
+  // (45%..105% of HRmax) so the intensity bands are stable, full-height
+  // gridlines; readings outside the range clamp to the chart edges rather
+  // than stretching (and compressing) the scale. Without zones it
+  // auto-scales to the window as before.
+  function sparklineScale(dataLo, dataHi, zones) {
+    if (!zones || !Array.isArray(zones.divisors)) return [dataLo, dataHi];
+    return [Math.round(zones.maxHr * 0.45), Math.round(zones.maxHr * 1.05)];
+  }
+
+  // Axis labels beside the chart. With zones: every gridline, as the zone's
+  // BPM cut-off. Without: the window min/max in BPM.
+  function renderBounds(panel, zones, y, dataLo, dataHi) {
+    const tick = (yPos, text) =>
+      `<div class="tick" style="top:${((yPos / SPARK_H) * 100).toFixed(1)}%">${text}</div>`;
+    if (zones && Array.isArray(zones.divisors)) {
+      panel.boundsEl.innerHTML = zones.divisors
+        .map((d) => tick(y(d), String(d)))
+        .join("");
+    } else {
+      panel.boundsEl.innerHTML = tick(y(dataHi), dataHi) + tick(y(dataLo), dataLo);
+    }
+  }
+
+  // Translucent band rects + hairlines at the divisors, behind the line.
+  // Bands span divisor-to-divisor only (Z1..Z5, i.e. 50%..100% of HRmax) so
+  // each colored stripe lines up exactly with the axis labels; the rest/over
+  // margins beyond the outermost divisors stay uncolored.
+  function zoneBandsSvg(zones, lo, hi, y) {
+    if (!zones || !Array.isArray(zones.divisors)) return "";
+    const d = zones.divisors;
+    let svg = "";
+    for (let i = 0; i + 1 < d.length; i++) {
+      const top = y(Math.min(d[i + 1], hi));
+      const bottom = y(Math.max(d[i], lo));
+      if (bottom <= top) continue; // band entirely outside the visible range
+      svg += `<rect class="band ${ZONE_NAMES[i + 1]}" x="0" y="${top.toFixed(1)}" ` +
+        `width="${SPARK_W}" height="${(bottom - top).toFixed(1)}"/>`;
+    }
+    for (const div of d) {
+      if (div <= lo || div >= hi) continue;
+      svg += `<line class="band-line" x1="0" y1="${y(div).toFixed(1)}" ` +
+        `x2="${SPARK_W}" y2="${y(div).toFixed(1)}"/>`;
+    }
+    return svg;
+  }
+
+  function renderSparkline(panel, samples, zones) {
+    // Only draw samples within the window; older points (e.g. frozen during a
+    // disconnect) are clipped relative to the client's clock.
+    const cutoff = Date.now() - WINDOW_MS;
+    const s = samples.filter(([t]) => t >= cutoff);
+
+    if (!s.length) {
+      panel.sparkEl.innerHTML = "";
+      panel.boundsEl.innerHTML = "";
+      return;
+    }
+
+    let dataLo = Infinity;
+    let dataHi = -Infinity;
+    for (const [, bpm] of s) {
+      if (bpm < dataLo) dataLo = bpm;
+      if (bpm > dataHi) dataHi = bpm;
+    }
+
+    const [lo, hi] = sparklineScale(dataLo, dataHi, zones);
+    const span = hi - lo || 1; // avoid divide-by-zero on a flat line
+    const innerH = SPARK_H - 2 * SPARK_PAD_Y;
+    const x = (t) => ((t - cutoff) / WINDOW_MS) * SPARK_W;
+    const y = (bpm) =>
+      SPARK_PAD_Y + (1 - (Math.min(hi, Math.max(lo, bpm)) - lo) / span) * innerH;
+
+    renderBounds(panel, zones, y, dataLo, dataHi);
+
+    const pts = s.map(([t, bpm]) => `${x(t).toFixed(1)},${y(bpm).toFixed(1)}`);
+    const [lastT, lastBpm] = s[s.length - 1];
+    const bands = zoneBandsSvg(zones, lo, hi, y);
+    // With zone bands, the area fill just muddies the band colors — skip it.
+    const area = bands
+      ? ""
+      : `<path class="spark-area" d="M ${x(s[0][0]).toFixed(1)},${SPARK_H} ` +
+        pts.map((pt) => `L ${pt}`).join(" ") +
+        ` L ${x(lastT).toFixed(1)},${SPARK_H} Z"/>`;
+
+    panel.sparkEl.innerHTML =
+      `<svg viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none">` +
+      bands +
+      area +
+      `<polyline class="spark-line" points="${pts.join(" ")}"/>` +
+      // The live-head dot is a zero-length round-capped stroke: with
+      // non-scaling-stroke it stays a screen-space circle even though the
+      // viewBox is stretched non-uniformly (a <circle> would render as an
+      // ellipse).
+      `<path class="spark-dot" d="M ${x(lastT).toFixed(1)},${y(lastBpm).toFixed(1)} h 0.01"/>` +
+      `</svg>`;
+  }
+
+  function renderSession(panel, session) {
+    if (!session || !session.count) {
+      panel.sessionEl.innerHTML = "";
+      return;
+    }
+    panel.sessionEl.innerHTML =
+      `<span>session</span>` +
+      `<span>min <b>${session.min}</b></span>` +
+      `<span>avg <b>${session.avg}</b></span>` +
+      `<span>max <b>${session.max}</b></span>`;
+  }
+
+  function render(state) {
+    // Parse the session clock first — the zone-time bar's scale needs it.
+    // Null when no session is open (e.g. after an idle auto-close).
+    const started = state.sessionStartedAt ? new Date(state.sessionStartedAt) : null;
+    sessionStartedAt = started && !isNaN(started) ? started : null;
+    const seen = new Set();
+    for (const p of state.participants || []) {
+      // Only show participants a source has activated; an unconfigured (unpaired)
+      // participant is never touched, so it stays hidden.
+      if (!p.active) continue;
+      seen.add(p.participantId);
+      renderParticipant(p);
+    }
+    // Remove panels for participants no longer present or no longer active.
+    for (const [id, panel] of panels) {
+      if (!seen.has(id)) {
+        panel.root.remove();
+        panels.delete(id);
+      }
+    }
+    // Only show the clock alongside panels — an idle overlay stays blank.
+    renderSessionClock(seen.size > 0);
+  }
+
+  function renderSessionClock(visible) {
+    clockVisible = visible;
+    if (!visible || !sessionStartedAt) {
+      clockEl.textContent = "";
+      return;
+    }
+    const hhmm = sessionStartedAt.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const mins = Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000));
+    clockEl.textContent =
+      `Start: ${hhmm} · Duration: ${mins} ${mins === 1 ? "minute" : "minutes"}`;
+  }
+
+  // Keep the duration fresh even when no telemetry is arriving.
+  setInterval(() => renderSessionClock(clockVisible), 30000);
+
+  return { render };
+}

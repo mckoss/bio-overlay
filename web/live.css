@@ -1,0 +1,126 @@
+/* Camera + control-bar styling for the live compositing page. The overlay
+   panels themselves are styled by ../overlay/overlay.css. */
+
+body {
+  background: #10141a; /* overlay.css makes body transparent; give it ground */
+}
+
+#camera {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #10141a;
+}
+
+#camera.mirrored {
+  transform: scaleX(-1);
+}
+
+#camera-off {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #46536a;
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+#camera.on + #camera-off {
+  display: none;
+}
+
+/* Control bar: bottom center, fades out when idle. */
+#bar {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 95vw;
+  padding: 0.5rem 0.75rem;
+  background: rgba(10, 14, 20, 0.85);
+  border: 1px solid #2c3846;
+  border-radius: 10px;
+  transition: opacity 0.4s;
+  z-index: 10;
+}
+
+#bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#bar button {
+  background: #4fc3f7;
+  border: none;
+  color: #08222e;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  text-shadow: none;
+}
+
+#bar button.secondary {
+  background: #2c3846;
+  color: #e8edf4;
+}
+
+#bar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#straps {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.strap-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  background: #1a212b;
+  border: 1px solid #2c3846;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  color: #e8edf4;
+  cursor: pointer;
+  text-shadow: none;
+}
+
+.strap-chip .dot {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: #ffa726;
+}
+
+.strap-chip .dot.ok { background: #66bb6a; }
+.strap-chip .dot.err { background: #ef5350; }
+
+.strap-chip .batt {
+  color: #8b98a9;
+}
+
+.strap-chip .batt.low {
+  color: #ef5350;
+  font-weight: 700;
+}
+
+#notice {
+  color: #8b98a9;
+  font-size: 0.78rem;
+  text-shadow: none;
+}
