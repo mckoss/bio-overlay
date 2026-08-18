@@ -144,6 +144,19 @@ body {
   align-self: flex-end;
 }
 
+/* Semi-transparent logo watermark, bottom-right, under the UI layers. */
+#watermark {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 5;
+}
+
 /* Strap profile editor: small centered card above the control bar. */
 #profile-editor {
   position: absolute;
