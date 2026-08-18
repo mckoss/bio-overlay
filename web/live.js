@@ -243,7 +243,21 @@ async function toggleCamera() {
     cameraEl.classList.add("on");
     cameraBtn.textContent = "Stop camera";
   } catch (err) {
-    notice(`camera failed: ${err.message}`);
+    // NotReadableError/AbortError = the device is held by another app —
+    // common on Windows, where webcams are exclusive-access.
+    if (err.name === "NotReadableError" || err.name === "AbortError") {
+      notice(
+        "camera is in use by another app — turn off your Zoom video " +
+        "(or close other camera apps), then click Start camera again"
+      );
+    } else if (err.name === "NotAllowedError") {
+      notice(
+        "camera access is blocked — allow the camera for this site " +
+        "(click the icon by the address bar), then click Start camera again"
+      );
+    } else {
+      notice(`camera failed: ${err.message}`);
+    }
   }
 }
 

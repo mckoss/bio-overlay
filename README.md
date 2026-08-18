@@ -89,8 +89,8 @@ Polar H10 #1 -- BLE --+
 
 **Hosted** (GitHub Pages, deployed from `main` by the Pages workflow):
 
-- Live page: **https://mckoss.com/bio-overlay/web/** (`?sim=2` for fake straps)
-- History: **https://mckoss.com/bio-overlay/web/history.html**
+- Live page: **https://mckoss.com/bio-overlay/** (`?sim=2` for fake straps)
+- History: **https://mckoss.com/bio-overlay/history.html**
 
 Or serve locally from the **repo root** (Web Bluetooth needs localhost or https):
 

@@ -40,19 +40,17 @@ jobs:
       - name: Assemble site
         run: |
           mkdir -p _site/overlay
-          cp -R web _site/web
-          rm -rf _site/web/test
+          # web/ is lifted to the site root: the live page IS the site
+          # (https://mckoss.com/bio-overlay/), history at /history.html.
+          cp -R web/. _site/
+          rm -rf _site/test _site/README.md
           # Only the shared modules/styles the web pages import — not the
           # desktop-only pages (index/config/history HTML need the server).
           cp overlay/*.js overlay/*.css _site/overlay/
-          # Root of the project site redirects to the live page.
-          cat > _site/index.html <<'HTML'
-          <!DOCTYPE html>
-          <meta charset="utf-8">
-          <meta http-equiv="refresh" content="0; url=web/">
-          <title>bio-overlay</title>
-          <a href="web/">bio-overlay live page</a>
-          HTML
+          # In the repo the pages live under web/ and import ../overlay/…;
+          # at the site root that copy lives at overlay/ — rewrite the
+          # relative references to match.
+          sed -i 's|\.\./overlay/|overlay/|g' _site/*.html _site/*.js
 
       - uses: actions/upload-pages-artifact@v3
         with:
