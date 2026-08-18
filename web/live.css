@@ -81,8 +81,8 @@ body {
   cursor: default;
 }
 
-/* The History link styled as a secondary button. */
-#history-link {
+/* Links in the bar (History, About) styled as secondary buttons. */
+#bar .linkbtn {
   background: #2c3846;
   color: #e8edf4;
   font-weight: 600;
