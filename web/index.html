@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>bio-overlay live</title>
+  <title>bio-overlay</title>
   <link rel="stylesheet" href="./overlay/overlay.css" />
   <link rel="stylesheet" href="live.css" />
+  <link rel="icon" href="img/logo.svg" />
 </head>
 <body>
   <!--
@@ -19,6 +20,11 @@
   <!-- Overlay host elements, styled by ./overlay/overlay.css -->
   <div id="panels" class="panels"></div>
   <div id="session-clock" class="session-clock"></div>
+
+  <!-- Discreet watermark; non-interactive so a mid-session click can't
+       navigate away and drop the strap connections. -->
+  <img id="watermark" src="img/logo.svg" alt="" />
+
 
   <!-- Control bar: auto-hides when the mouse leaves / goes idle so it never
        shows up in the shared tab during a session. -->
