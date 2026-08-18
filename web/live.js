@@ -3,14 +3,14 @@
 // Wiring: strap.js (Web Bluetooth) -> hub.js (state accounting) ->
 // ./overlay/render.js (the same renderer the OBS overlay uses). Readings are
 // written through to IndexedDB so a tab reload doesn't lose the day's data;
-// "Download JSONL" exports today's readings in the desktop history format.
+// past sessions are reviewed and downloaded from history.html.
 //
 // `?sim=2` runs two simulated straps for trying the page without hardware.
 
 import { createOverlayRenderer } from "./overlay/render.js";
 import { WebHub } from "./hub.js";
 import { requestStrap, streamStrap, deviceIdFromName } from "./strap.js";
-import { openDb, addReading, getAllReadings, localDay } from "./db.js";
+import { openDb, addReading, localDay } from "./db.js";
 import { loadProfiles, saveProfile } from "./profiles.js";
 
 // First-time visitors land on the about page instead of a bare app. Skipped
@@ -41,7 +41,6 @@ const connectBtn = document.getElementById("connect");
 const cameraBtn = document.getElementById("camera-btn");
 const mirrorBtn = document.getElementById("mirror-btn");
 const newSessionBtn = document.getElementById("new-session");
-const exportBtn = document.getElementById("export");
 
 function notice(msg) {
   noticeEl.textContent = msg;
@@ -81,7 +80,7 @@ editorEl.addEventListener("keydown", (e) => {
   if (e.key === "Escape") editorEl.classList.add("hidden");
 });
 
-// ---------- IndexedDB write-through + JSONL export ----------
+// ---------- IndexedDB write-through ----------
 
 const dbPromise = openDb().catch((err) => {
   notice(`IndexedDB unavailable: ${err?.message ?? err}`);
@@ -102,45 +101,8 @@ hub.onReading(async ({ id, index, bpm, rrMs, atMs }) => {
     bpm,
     rr: rrMs.map((v) => Math.round(v * 10) / 10),
   });
-  exportBtn.disabled = false;
 });
 
-async function exportJsonl() {
-  const db = await dbPromise;
-  if (!db) return;
-  const today = localDay(Date.now());
-  const rows = await getAllReadings(db, today);
-  if (!rows.length) return;
-
-  // Desktop history format: a session header line, then compact reading lines
-  // with seconds relative to the session start.
-  const lines = [];
-  let currentSession = null;
-  for (const r of rows) {
-    if (r.sessionStart !== currentSession) {
-      currentSession = r.sessionStart;
-      const ids = [...new Map(rows.filter((x) => x.sessionStart === r.sessionStart)
-        .map((x) => [x.index, x])).values()]
-        .sort((a, b) => a.index - b.index);
-      lines.push(JSON.stringify({
-        session: new Date(r.sessionStart ?? r.atMs).toISOString(),
-        participants: ids.map((x) => ({ id: x.pid, name: x.name, deviceId: x.pid })),
-      }));
-    }
-    lines.push(JSON.stringify({
-      s: Math.round((r.atMs - (r.sessionStart ?? r.atMs)) / 1000),
-      p: r.index,
-      bpm: r.bpm,
-      rr: r.rr,
-    }));
-  }
-  const blob = new Blob([lines.join("\n") + "\n"], { type: "application/jsonl" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${today}.jsonl`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
 
 // ---------- straps ----------
 
@@ -321,7 +283,6 @@ newSessionBtn.addEventListener("click", () => {
   renderer.render(hub.snapshot()); // clear panels now, not at the next tick
   notice("new session started — stats, sparklines, and zone times cleared");
 });
-exportBtn.addEventListener("click", exportJsonl);
 
 if (!navigator.bluetooth) {
   connectBtn.disabled = true;

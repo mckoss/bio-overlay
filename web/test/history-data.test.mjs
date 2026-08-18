@@ -4,7 +4,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { listSessions, sessionDetail, sessionKeyOf } from "../history-data.js";
+import {
+  listSessions, sessionDetail, sessionKeyOf, sessionToJsonl,
+} from "../history-data.js";
 
 const T0 = Date.UTC(2026, 7, 18, 16, 0, 0); // 2026-08-18 16:00Z
 const DIVISORS = [81, 97, 113, 130, 146, 162];
@@ -100,4 +102,18 @@ test("rows with null sessionStart group under their first timestamp", () => {
   const sessions = listSessions(rows, () => DIVISORS);
   assert.equal(sessions.length, 1);
   assert.equal(sessions[0].id, `2026-08-18__${T0}`);
+});
+
+test("sessionToJsonl emits the desktop history format", () => {
+  const text = sessionToJsonl(sampleRows(), `2026-08-18__${S1}`);
+  const lines = text.trimEnd().split("\n").map((l) => JSON.parse(l));
+  assert.equal(lines[0].session, new Date(S1).toISOString());
+  assert.deepEqual(lines[0].participants,
+    [{ id: "AAAA", name: "Mike", deviceId: "AAAA" }]);
+  assert.deepEqual(lines.slice(1), [
+    { s: 0, p: 0, bpm: 100, rr: [] },
+    { s: 2, p: 0, bpm: 100, rr: [] },
+    { s: 4, p: 0, bpm: 120, rr: [] },
+  ]);
+  assert.equal(sessionToJsonl(sampleRows(), "nope"), null);
 });

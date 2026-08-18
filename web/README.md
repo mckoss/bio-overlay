@@ -32,8 +32,8 @@ Web Bluetooth needs a secure context; `localhost` qualifies. Serve from the
   tab* and tick **"Optimize for video clip"** — that replaces the OBS
   setup for 1-on-1 remote sessions. The control bar auto-hides when idle
   so it stays out of the shared picture. Readings are written through to
-  IndexedDB; **Download JSONL** exports today's data in the desktop
-  history format. Try it without hardware: `?sim=2`.
+  IndexedDB; each session can be downloaded from the history page (in
+  the desktop app's history-file format). Try it without hardware: `?sim=2`.
 - **History page**: http://localhost:8090/web/history.html — the same
   session list and per-session detail as the desktop app (time-in-zone
   bars, banded sparkline, stats, delete), backed by the IndexedDB

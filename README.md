@@ -19,7 +19,7 @@ It comes in **two versions**:
 | Strap connection | Native BLE (bleak) | Web Bluetooth, in the browser |
 | Compositing | OBS Browser Source + Virtual Camera | The page itself (camera + overlay in one tab) |
 | Into Zoom | Select "OBS Virtual Camera" | Share the tab (Screen Share) |
-| History | Daily JSONL files on disk | IndexedDB + JSONL export |
+| History | Daily JSONL files on disk | IndexedDB + per-session downloads |
 | Browsers/OS | macOS & Windows app; overlay in any browser/OBS | Chrome/Edge only (no Safari/Firefox/iOS) |
 | Status | Stable, released | Experimental — see [web/README.md](web/README.md) |
 
@@ -81,7 +81,7 @@ Polar H10 #1 -- BLE --+
                       |   (Web Bluetooth)
                       v
                  Chrome tab:  camera + overlay cards   ──> IndexedDB history
-                      |                                     (+ JSONL export)
+                      |                                     (+ downloads)   
                       v
         Zoom "Share Screen → this tab" ("Optimize for video clip")
 ```
@@ -113,8 +113,8 @@ The web version shares the desktop app's overlay renderer
 (`overlay/render.js`) and mirrors its zone math and session accounting, so
 the cards look and behave identically. Limitations: Chrome/Edge only (Safari,
 Firefox, and all iOS browsers lack Web Bluetooth), straps are re-picked from
-the chooser each visit, and history lives in the browser (IndexedDB) with a
-JSONL export in the desktop format. Roadmap (static hosting, then a hosted
+the chooser each visit, and history lives in the browser (IndexedDB), with
+per-session downloads in the desktop file format. Roadmap (static hosting, then a hosted
 trainer/client version): [web/README.md](web/README.md).
 
 ## Download (desktop app)

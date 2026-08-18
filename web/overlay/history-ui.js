@@ -98,10 +98,19 @@ export function createHistoryPage({ listView, detailView, sessionsEl, detailEl, 
       card.addEventListener("click", () => loadDetail(s.id));
 
       const row = el("div", "session-row");
+      row.append(card);
+      // Download is optional — offered only when the data source can
+      // serve a session as a file (the web/IndexedDB backend).
+      if (api.download) {
+        const dl = el("button", "btn-download", "⤓");
+        dl.title = "Download this session's workout data";
+        dl.addEventListener("click", () => api.download(s));
+        row.append(dl);
+      }
       const del = el("button", "btn-delete", "✕");
       del.title = "Delete this session";
       del.addEventListener("click", () => deleteSession(s));
-      row.append(card, del);
+      row.append(del);
       sessionsEl.appendChild(row);
     }
   }
