@@ -81,6 +81,18 @@ body {
   cursor: default;
 }
 
+/* The History link styled as a secondary button. */
+#history-link {
+  background: #2c3846;
+  color: #e8edf4;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  text-decoration: none;
+  text-shadow: none;
+}
+
 #straps {
   display: flex;
   gap: 0.4rem;
