@@ -336,7 +336,11 @@ function startSim(n) {
 connectBtn.addEventListener("click", onConnectClick);
 cameraBtn.addEventListener("click", toggleCamera);
 mirrorBtn.addEventListener("click", () => cameraEl.classList.toggle("mirrored"));
-newSessionBtn.addEventListener("click", () => hub.resetSession());
+newSessionBtn.addEventListener("click", () => {
+  hub.resetSession();
+  renderer.render(hub.snapshot()); // clear panels now, not at the next tick
+  notice("new session started — stats, sparklines, and zone times cleared");
+});
 exportBtn.addEventListener("click", exportJsonl);
 
 if (!navigator.bluetooth) {
@@ -354,3 +358,7 @@ setInterval(() => renderer.render(hub.snapshot()), 1000);
 if (new URLSearchParams(location.search).has("editor")) {
   openProfileEditor("16CD9E3C", { name: "Mike", birthYear: 1960 }, () => {});
 }
+// Dev aid: `?reset=MS` clicks New session after MS, to verify the reset path
+// in a headless screenshot.
+const resetMs = Number(new URLSearchParams(location.search).get("reset"));
+if (resetMs) setTimeout(() => newSessionBtn.click(), resetMs);
