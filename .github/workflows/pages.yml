@@ -1,0 +1,62 @@
+# Deploy the web version to GitHub Pages (https://mckoss.com/bio-overlay/).
+#
+# The published site is just the static web app: web/ plus the shared overlay
+# modules it imports (overlay/*.js, *.css) — laid out with the same relative
+# structure the pages expect (web/ imports ../overlay/...). The repo's Python
+# sources, tests, and docs are not published.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "overlay/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run web tests
+        run: node --test web/test/*.test.mjs
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/overlay
+          cp -R web _site/web
+          rm -rf _site/web/test
+          # Only the shared modules/styles the web pages import — not the
+          # desktop-only pages (index/config/history HTML need the server).
+          cp overlay/*.js overlay/*.css _site/overlay/
+          # Root of the project site redirects to the live page.
+          cat > _site/index.html <<'HTML'
+          <!DOCTYPE html>
+          <meta charset="utf-8">
+          <meta http-equiv="refresh" content="0; url=web/">
+          <title>bio-overlay</title>
+          <a href="web/">bio-overlay live page</a>
+          HTML
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
