@@ -41,13 +41,11 @@ jobs:
         run: |
           # web/ is lifted to the site root: the live page IS the site
           # (https://mckoss.com/bio-overlay/), history at /history.html.
-          # web/overlay is a symlink to ../overlay, so pages import
-          # ./overlay/… identically in dev and prod; -L dereferences it into
-          # a real directory here. No path rewriting of any kind.
-          cp -RL web/. _site/
+          # web/ is fully self-contained (the shared modules live in
+          # web/overlay/, which the desktop app also serves), so this is a
+          # plain copy — no symlinks, no rewriting.
+          cp -R web/. _site/
           rm -rf _site/test _site/README.md
-          # Drop the desktop-only overlay pages (they need the local server).
-          rm -f _site/overlay/*.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
