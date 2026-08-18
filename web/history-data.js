@@ -84,6 +84,33 @@ export function listSessions(rows, divisorsForPid) {
 }
 
 /**
+ * One session serialized in the desktop app's history-file format: a
+ * session header line, then compact reading lines with seconds relative to
+ * the session start. Returns null for an unknown id.
+ */
+export function sessionToJsonl(rows, id) {
+  const list = groupBySession(rows).get(id);
+  if (!list) return null;
+  const start = list[0].sessionStart ?? list[0].atMs;
+  const lines = [JSON.stringify({
+    session: new Date(start).toISOString(),
+    participants: [...byParticipant(list).values()].map((rows) => {
+      const last = rows[rows.length - 1];
+      return { id: last.pid, name: nameOf(rows), deviceId: last.pid };
+    }),
+  })];
+  for (const r of list) {
+    lines.push(JSON.stringify({
+      s: Math.round((r.atMs - start) / 1000),
+      p: r.index,
+      bpm: r.bpm,
+      rr: r.rr,
+    }));
+  }
+  return lines.join("\n") + "\n";
+}
+
+/**
  * Full detail for one session — the /api/history/<id> shape:
  * {id, date, startedAt, durationS, participants: [{id, name, deviceId,
  *  points: [[s, bpm]], stats: {min, max, avg, count}, zones}]}.

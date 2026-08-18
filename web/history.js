@@ -6,7 +6,9 @@
 import { createHistoryPage } from "./overlay/history-ui.js";
 import { openDb, getAllReadings, deleteReadings } from "./db.js";
 import { loadProfiles } from "./profiles.js";
-import { listSessions, sessionDetail, sessionKeyOf } from "./history-data.js";
+import {
+  listSessions, sessionDetail, sessionKeyOf, sessionToJsonl,
+} from "./history-data.js";
 import { zonesFor } from "./zones.js";
 
 const dbPromise = openDb();
@@ -35,6 +37,20 @@ createHistoryPage({
     },
     async delete(id) {
       await deleteReadings(await dbPromise, (row) => sessionKeyOf(row) === id);
+    },
+    // Save one session as a file in the desktop history format.
+    async download(s) {
+      const rows = await getAllReadings(await dbPromise);
+      const text = sessionToJsonl(rows, s.id);
+      if (!text) return;
+      const stamp = new Date(s.startedAt).toISOString()
+        .slice(0, 16).replace("T", "-").replace(":", "");
+      const blob = new Blob([text], { type: "application/jsonl" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `bio-overlay-${stamp}.jsonl`;
+      a.click();
+      URL.revokeObjectURL(a.href);
     },
   },
 });
