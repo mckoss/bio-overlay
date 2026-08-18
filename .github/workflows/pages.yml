@@ -39,19 +39,15 @@ jobs:
 
       - name: Assemble site
         run: |
-          mkdir -p _site/overlay
           # web/ is lifted to the site root: the live page IS the site
           # (https://mckoss.com/bio-overlay/), history at /history.html.
-          cp -R web/. _site/
+          # web/overlay is a symlink to ../overlay, so pages import
+          # ./overlay/… identically in dev and prod; -L dereferences it into
+          # a real directory here. No path rewriting of any kind.
+          cp -RL web/. _site/
           rm -rf _site/test _site/README.md
-          # Only the shared modules/styles the web pages import — not the
-          # desktop-only pages (index/config/history HTML need the server).
-          cp overlay/*.js overlay/*.css _site/overlay/
-          # In the repo the pages live under web/ and import ../overlay/…;
-          # at the site root that copy lives at overlay/ — rewrite the
-          # relative references to match. Must be "./overlay/", not
-          # "overlay/": a bare specifier is invalid in ES module imports.
-          sed -i 's|\.\./overlay/|./overlay/|g' _site/*.html _site/*.js
+          # Drop the desktop-only overlay pages (they need the local server).
+          rm -f _site/overlay/*.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -59,3 +55,21 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # Execute the deployed page for real (modules, hub, renderer) — a curl
+      # for 200s can't catch a broken import graph, which leaves the page
+      # looking fine with every button inert.
+      - name: Smoke-test deployed site
+        run: |
+          URL="${{ steps.deployment.outputs.page_url }}?sim=2"
+          echo "Smoke-testing $URL"
+          google-chrome --headless --disable-gpu --no-sandbox \
+            --virtual-time-budget=8000 --enable-logging=stderr \
+            --dump-dom "$URL" >dom.html 2>console.log || true
+          if grep -iE "uncaught|failed to resolve module" console.log; then
+            echo "::error::JS errors on deployed page"; exit 1
+          fi
+          if ! grep -q 'class="panel' dom.html; then
+            echo "::error::overlay panels did not render (sim mode)"; exit 1
+          fi
+          echo "smoke test passed: panels rendered, console clean"

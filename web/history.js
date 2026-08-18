@@ -3,7 +3,7 @@
 // from the strap profiles in localStorage; straps without a profile fall
 // back to the default assumed-age zones, matching the desktop server.
 
-import { createHistoryPage } from "../overlay/history-ui.js";
+import { createHistoryPage } from "./overlay/history-ui.js";
 import { openDb, getAllReadings, deleteReadings } from "./db.js";
 import { loadProfiles } from "./profiles.js";
 import { listSessions, sessionDetail, sessionKeyOf } from "./history-data.js";
