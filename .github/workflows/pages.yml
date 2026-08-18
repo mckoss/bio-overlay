@@ -49,8 +49,9 @@ jobs:
           cp overlay/*.js overlay/*.css _site/overlay/
           # In the repo the pages live under web/ and import ../overlay/…;
           # at the site root that copy lives at overlay/ — rewrite the
-          # relative references to match.
-          sed -i 's|\.\./overlay/|overlay/|g' _site/*.html _site/*.js
+          # relative references to match. Must be "./overlay/", not
+          # "overlay/": a bare specifier is invalid in ES module imports.
+          sed -i 's|\.\./overlay/|./overlay/|g' _site/*.html _site/*.js
 
       - uses: actions/upload-pages-artifact@v3
         with:
