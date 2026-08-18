@@ -1,13 +1,13 @@
 // Live compositing page: webcam + HR overlay in one tab, for sharing in Zoom.
 //
 // Wiring: strap.js (Web Bluetooth) -> hub.js (state accounting) ->
-// ../overlay/render.js (the same renderer the OBS overlay uses). Readings are
+// ./overlay/render.js (the same renderer the OBS overlay uses). Readings are
 // written through to IndexedDB so a tab reload doesn't lose the day's data;
 // "Download JSONL" exports today's readings in the desktop history format.
 //
 // `?sim=2` runs two simulated straps for trying the page without hardware.
 
-import { createOverlayRenderer } from "../overlay/render.js";
+import { createOverlayRenderer } from "./overlay/render.js";
 import { WebHub } from "./hub.js";
 import { requestStrap, streamStrap, deviceIdFromName } from "./strap.js";
 import { openDb, addReading, getAllReadings, localDay } from "./db.js";
