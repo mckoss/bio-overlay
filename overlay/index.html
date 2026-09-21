@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>bio-overlay</title>
     <link rel="stylesheet" href="overlay/overlay.css" />
+    <link rel="stylesheet" href="session.css" />
   </head>
   <body>
     <!--
@@ -12,6 +13,10 @@
       Panels are rendered dynamically from telemetry; markup here is just the host.
     -->
     <div id="panels" class="panels"></div>
+    <!-- Red badge when nothing is being recorded (shows in OBS too, by design);
+         the buttons below it only appear on mouse movement. -->
+    <div id="session-badge" class="session-badge" hidden></div>
+    <div id="session-controls" class="session-controls" hidden></div>
     <div id="session-clock" class="session-clock"></div>
     <div id="status" class="conn-status" title="WebSocket status"></div>
     <script type="module" src="overlay.js"></script>

@@ -13,7 +13,8 @@ Endpoints:
     GET  /api/config  -> current config as JSON
     PUT  /api/config  -> save config to disk
     GET  /api/scan    -> discover nearby straps (deviceId, name, address)
-    POST /api/new-session -> clear session stats/sparklines and start fresh
+    POST /api/session/{new|pause|resume|stop} -> drive session recording
+    POST /api/new-session -> alias for /api/session/new (older pages)
 """
 
 from __future__ import annotations
@@ -181,14 +182,27 @@ async def _healthz(_request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
-async def _new_session(request: web.Request) -> web.Response:
-    """Start a fresh session (used by the setup page's Start-new-session button)."""
-    cb = request.app.get("start_new_session")
+SESSION_ACTIONS = ("new", "pause", "resume", "stop")
+
+
+async def _run_session_action(app: web.Application, action: str) -> web.Response:
+    if action not in SESSION_ACTIONS:
+        raise web.HTTPNotFound(reason=f"unknown session action: {action}")
+    cb = app.get("session_control")
     if cb is None:
-        raise web.HTTPNotImplemented(reason="new session not available")
-    await cb()
-    logger.info("new session started via /api/new-session")
+        raise web.HTTPNotImplemented(reason="session control not available")
+    await cb(action)
     return web.json_response({"ok": True})
+
+
+async def _session_action(request: web.Request) -> web.Response:
+    """Start / pause / resume / stop recording (overlay, setup, history pages)."""
+    return await _run_session_action(request.app, request.match_info["action"])
+
+
+async def _new_session(request: web.Request) -> web.Response:
+    """Alias kept so a long-lived tab of an older setup page still works."""
+    return await _run_session_action(request.app, "new")
 
 
 async def _quit(request: web.Request) -> web.Response:
@@ -298,7 +312,7 @@ def build_app(
     history_dir: str | None = None,
     history_writer=None,
     request_shutdown=None,
-    start_new_session=None,
+    session_control=None,
 ) -> web.Application:
     app = web.Application(middlewares=[_no_cache_middleware])
     app["hub"] = hub
@@ -308,7 +322,7 @@ def build_app(
     app["history_dir"] = history_dir
     app["history_writer"] = history_writer
     app["request_shutdown"] = request_shutdown
-    app["start_new_session"] = start_new_session
+    app["session_control"] = session_control
     app["websockets"] = set()
     app.on_shutdown.append(_on_shutdown)
     app.add_routes(
@@ -324,6 +338,7 @@ def build_app(
             web.get("/api/history", _api_history),
             web.get("/api/history/{id}", _api_session),
             web.delete("/api/history/{id}", _api_delete_session),
+            web.post("/api/session/{action}", _session_action),
             web.post("/api/new-session", _new_session),
             web.post("/api/quit", _quit),
         ]
@@ -368,7 +383,7 @@ async def run_server(
     history_dir: str | None = None,
     history_writer=None,
     request_shutdown=None,
-    start_new_session=None,
+    session_control=None,
 ) -> tuple[web.AppRunner, int]:
     """Start the server; return (runner, actual_port). Caller cleans up the runner."""
     app = build_app(
@@ -379,7 +394,7 @@ async def run_server(
         history_dir=history_dir,
         history_writer=history_writer,
         request_shutdown=request_shutdown,
-        start_new_session=start_new_session,
+        session_control=session_control,
     )
     runner = web.AppRunner(app)
     await runner.setup()

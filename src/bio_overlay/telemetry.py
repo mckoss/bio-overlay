@@ -8,6 +8,12 @@ process regardless of whether any overlay is connected, history accrues
 continuously, and a reloaded overlay (or OBS scene reload) is sent the full
 history on connect — so the sparkline and stats survive client reloads.
 
+A session is normally opened by the first reading and closed by the idle
+watchdog, but it can also be driven by hand from the overlay/setup pages:
+recording can be paused (the open session is kept, readings are ignored) or
+stopped (the session is closed and no new one opens until restarted). See
+``SESSION_STATES``.
+
 History lives only in memory for the lifetime of the process (one training
 session); nothing is written to disk.
 """
@@ -40,6 +46,20 @@ DEFAULT_RESP_WINDOW_S = 60
 # After this long without any reading, the session auto-closes: stats clear,
 # panels hide, and the next reading (whenever it comes) starts a new session.
 DEFAULT_IDLE_CLOSE_S = 30 * 60
+
+# Recording states, reported to clients as "sessionState":
+#   RECORDING - readings open/extend a session and are written to history.
+#   PAUSED    - the open session keeps its stats, but readings are neither
+#               accumulated nor recorded (live BPM still tracks the strap).
+#   STOPPED   - the session is closed and nothing is recorded until it is
+#               restarted; readings don't re-open one (so an idle app with a
+#               strap still transmitting can't accrue spurious sessions).
+# Only a user action reaches PAUSED/STOPPED; the idle auto-close leaves the
+# hub armed (RECORDING), so the next workout starts a session by itself.
+RECORDING = "recording"
+PAUSED = "paused"
+STOPPED = "stopped"
+SESSION_STATES = (RECORDING, PAUSED, STOPPED)
 
 # Zone-time accounting ignores gaps between readings longer than this
 # (dropouts). Must comfortably exceed the history writer's ~5s cadence so
@@ -192,6 +212,8 @@ class TelemetryHub:
         self._session_started_at: datetime | None = None
         # When the last reading arrived, for the idle auto-close.
         self._last_data_at: datetime | None = None
+        # Recording state: RECORDING / PAUSED / STOPPED (see above).
+        self._session_state = RECORDING
         self._stale_after_s = stale_after_s
         self._history_window_ms = int(history_window_s * 1000)
         self._resp_window_ms = int(resp_window_s * 1000)
@@ -328,6 +350,9 @@ class TelemetryHub:
         return {
             "type": "state",
             "sessionStartedAt": started.isoformat(timespec="seconds") if started else None,
+            # "recording" | "paused" | "stopped" — clients badge the two
+            # not-recording states prominently.
+            "sessionState": self._session_state,
             "participants": [
                 p.to_message(include_respiration=self._enable_respiration)
                 for p in self._participants.values()
@@ -349,38 +374,89 @@ class TelemetryHub:
         state = self._participants.get(participant_id)
         if state is None:
             return
-        state.active = True
         now = _now()
-        # Any reading opens a session (if none is open) and feeds the idle timer.
-        if self._session_started_at is None:
-            self._session_started_at = now
-        self._last_data_at = now
+        # Live vitals track the strap in every state, so the setup page can
+        # still show that a strap is connected while recording is paused or
+        # stopped. Only session accounting and recording are gated below.
         state.bpm = bpm
         state.rr_intervals_ms = rr_intervals_ms or []
         state.sensor_contact = sensor_contact
         state.connected = True
         state.stale = False
         state.updated_at = now.isoformat(timespec="milliseconds")
-        # bpm == 0 is the H10 reporting "no heartbeat detected" (loose contact),
-        # not a real reading — keep it out of the sparkline and session stats.
-        if bpm > 0:
-            now_ms = int(now.timestamp() * 1000)
-            state.record(bpm, now_ms, self._history_window_ms)
-            state.record_zone_time(bpm, now_ms, int(ZONE_MAX_GAP_S * 1000))
-            if state.rr_intervals_ms:
-                state.record_rr(state.rr_intervals_ms, now_ms, self._resp_window_ms)
-            if self._recorder is not None:
-                self._recorder(state, bpm, state.rr_intervals_ms, now)
+        if self._session_state == RECORDING:
+            state.active = True
+            # Any reading opens a session (if none is open) and feeds the idle timer.
+            if self._session_started_at is None:
+                self._session_started_at = now
+            self._last_data_at = now
+            # bpm == 0 is the H10 reporting "no heartbeat detected" (loose contact),
+            # not a real reading — keep it out of the sparkline and session stats.
+            if bpm > 0:
+                now_ms = int(now.timestamp() * 1000)
+                state.record(bpm, now_ms, self._history_window_ms)
+                state.record_zone_time(bpm, now_ms, int(ZONE_MAX_GAP_S * 1000))
+                if state.rr_intervals_ms:
+                    state.record_rr(state.rr_intervals_ms, now_ms, self._resp_window_ms)
+                if self._recorder is not None:
+                    self._recorder(state, bpm, state.rr_intervals_ms, now)
         await self._broadcast()
 
+    @property
+    def session_state(self) -> str:
+        """Current recording state: RECORDING, PAUSED, or STOPPED."""
+        return self._session_state
+
     async def reset_session(self, deactivate: bool = False) -> None:
-        """Close the session: drop sparklines and session aggregates.
+        """Close the session and arm for the next one: drop sparklines and stats.
 
         The next reading starts (and timestamps) a new session. For a manual
         reset, connection state and the latest reading are kept — the straps
         are still on the participants. An idle auto-close passes
         ``deactivate=True`` so the panels disappear from the overlay too.
+        Always leaves the hub RECORDING, so "start a new session" also lifts a
+        pause or a stop.
         """
+        self._clear_session(deactivate)
+        self._session_state = RECORDING
+        await self._broadcast()
+
+    async def pause_session(self) -> None:
+        """Pause recording: keep the open session, but ignore readings.
+
+        Stats, sparklines, and the session clock stay as they were, and
+        resuming continues the same session.
+        """
+        if self._session_state == PAUSED:
+            return
+        self._session_state = PAUSED
+        # The paused span belongs to no zone: start a fresh interval on resume
+        # rather than attributing the gap to the next reading's zone.
+        for state in self._participants.values():
+            state.zone_last_ms = None
+        await self._broadcast()
+
+    async def resume_session(self) -> None:
+        """Resume recording into the paused session (a no-op when recording)."""
+        if self._session_state == RECORDING:
+            return
+        self._session_state = RECORDING
+        for state in self._participants.values():
+            state.zone_last_ms = None
+        await self._broadcast()
+
+    async def stop_session(self) -> None:
+        """Stop recording: close the session and stay closed until restarted.
+
+        Unlike the idle auto-close, later readings do *not* open a new session —
+        so a strap left transmitting while you browse history records nothing.
+        """
+        self._clear_session(deactivate=True)
+        self._session_state = STOPPED
+        await self._broadcast()
+
+    def _clear_session(self, deactivate: bool = False) -> None:
+        """Drop the open session's history and aggregates (no broadcast)."""
         self._session_started_at = None
         for state in self._participants.values():
             state.samples.clear()
@@ -397,13 +473,15 @@ class TelemetryHub:
                 state.active = False
                 state.bpm = None
                 state.rr_intervals_ms = []
-        await self._broadcast()
 
     async def set_connected(self, participant_id: str, connected: bool) -> None:
         state = self._participants.get(participant_id)
         if state is None:
             return
-        state.active = True
+        # A strap connecting while recording is stopped must not resurrect the
+        # participant's panel; it only updates the link state.
+        if self._session_state == RECORDING:
+            state.active = True
         state.connected = connected
         if not connected:
             state.stale = True
@@ -442,6 +520,10 @@ class TelemetryHub:
     async def _maybe_close_idle_session(self, now: datetime) -> None:
         """Auto-close the session after idle_close_s without any reading, so a
         stale session is never blended into (or re-used by) the next one."""
+        # A paused session is idle on purpose, and a stopped one is already
+        # closed — neither is the watchdog's business.
+        if self._session_state != RECORDING:
+            return
         if self._session_started_at is None or self._last_data_at is None:
             return
         idle_s = (now - self._last_data_at).total_seconds()
@@ -468,4 +550,11 @@ class TelemetryHub:
                 self._subscribers.discard(cb)
 
 
-__all__ = ["ParticipantState", "TelemetryHub"]
+__all__ = [
+    "PAUSED",
+    "RECORDING",
+    "SESSION_STATES",
+    "STOPPED",
+    "ParticipantState",
+    "TelemetryHub",
+]

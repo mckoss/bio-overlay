@@ -196,7 +196,10 @@ or `bio-overlay run`). It's also served at `http://127.0.0.1:8080/config`.
 
 From there you can add/remove participants, edit each one's name/id/deviceId,
 **Scan** for nearby straps to assign (pair) them to a participant, and copy the
-overlay URL for OBS — then **Save**.
+overlay URL for OBS — then **Save**. The **Session & overlay** section shows
+whether the app is recording right now, with **Pause**, **Stop**, and **Start
+new session** buttons (see
+[Starting, pausing, and stopping](#starting-pausing-and-stopping-a-session)).
 
 ### `config.json` (manual)
 
@@ -328,6 +331,13 @@ Open `http://<host>:<port>/` (default `http://127.0.0.1:8080/`).
   browser it looks like dark cards on white — that's just the browser's page
   background, not the overlay.
 - A small dot in the bottom-right shows WebSocket status (green = connected).
+- When recording is paused or stopped, a **red "NOT RECORDING" badge** appears
+  above the session clock — on purpose, it shows in OBS too, so a stopped
+  session can't go unnoticed on camera. Click it to start recording again.
+- Session buttons (Pause / Stop / Start new session / Quit, plus links to the
+  setup and history pages) fade in at the bottom-left **when you move the
+  mouse** over the page, and fade out again a few seconds later. OBS Browser
+  Sources never send mouse events, so the buttons never appear in your video.
 - Debug aid: append `?bg=green` (or any CSS color) to paint the transparent
   background so you can see exactly which area is overlay vs see-through, e.g.
   `http://127.0.0.1:8080/?bg=magenta`. Leave it off for OBS.
@@ -400,6 +410,24 @@ high-contrast for readability. The cards are tuned for legibility when the
   restarting the server mid-session keeps the displayed history (note: all of a
   day's readings count as one session, so separate sessions on the same day
   merge unless you use a fresh `--history-dir`).
+
+### Starting, pausing, and stopping a session
+
+A session opens by itself with the first reading and closes automatically after
+30 minutes with no data. You can also drive it by hand — from the setup page,
+the history page, or the overlay page itself (move the mouse to reveal the
+buttons):
+
+| Action | Effect |
+| --- | --- |
+| **Pause** | Keeps the open session and its stats, but records nothing while paused. **Resume** continues the *same* session; the paused span is attributed to no intensity zone, and the idle auto-close won't fire while paused. |
+| **Stop** | Ends the session: stats and sparklines clear, the overlay cards disappear, and **later readings do not start a new one**. Use this when you want to leave the app running (browsing history, say) with a strap still transmitting — nothing is recorded until you start again. |
+| **Start new session** | Clears the stats/sparklines and records from the next reading, lifting a pause or a stop. The finished session stays in [history](#session-history). |
+
+While paused or stopped the overlay shows a red **NOT RECORDING** badge, the
+setup and history pages show the state in red, and the live BPM still tracks
+each strap so you can see the connection is healthy. Recording state is
+per-run: restarting the app starts armed and recording again.
 
 ### Respiration (experimental)
 

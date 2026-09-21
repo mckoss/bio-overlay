@@ -23,7 +23,7 @@ from . import __version__
 from .config import AppConfig
 from .paths import default_config_path, default_history_dir
 from .server import PortInUseError, run_server
-from .telemetry import TelemetryHub
+from .telemetry import STOPPED, TelemetryHub
 
 
 def _resolve_config_path(args: argparse.Namespace) -> str:
@@ -151,6 +151,28 @@ async def _serve_with_source(
             writer.reset_session()
         logging.info("started a new session (stats and sparklines cleared)")
 
+    async def session_control(action: str) -> None:
+        """Drive recording from the overlay/setup/history pages."""
+        if action == "new":
+            await start_new_session()
+        elif action == "pause":
+            await hub.pause_session()
+            logging.info("paused recording (session kept; nothing recorded)")
+        elif action == "resume":
+            # Resuming after a stop has no session to return to, so it starts
+            # (and marks) a new one instead.
+            if hub.session_state == STOPPED:
+                await start_new_session()
+            else:
+                await hub.resume_session()
+                logging.info("resumed recording")
+        elif action == "stop":
+            await hub.stop_session()
+            if writer is not None:
+                # Mark a boundary so a restart can't re-seed the stopped session.
+                writer.reset_session()
+            logging.info("stopped recording (no session until restarted)")
+
     # The history page reads past sessions even when not writing (simulate /
     # --no-history), so resolve a directory to read from regardless.
     history_read_dir = history_dir or str(default_history_dir())
@@ -170,7 +192,7 @@ async def _serve_with_source(
         history_dir=history_read_dir,
         history_writer=writer,
         request_shutdown=lambda: loop.call_soon_threadsafe(stop.set),
-        start_new_session=start_new_session,
+        session_control=session_control,
     )
 
     if open_browser:

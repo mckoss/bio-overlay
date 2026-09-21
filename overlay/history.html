@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>bio-overlay · history</title>
     <link rel="stylesheet" href="overlay/history.css" />
+    <link rel="stylesheet" href="session.css" />
   </head>
   <body>
     <main class="wrap">
@@ -12,6 +13,14 @@
         <h1>bio-overlay history</h1>
         <p class="nav"><a href="/config">← Setup</a></p>
       </header>
+
+      <!-- Whether the app is recording right now, and the controls to change
+           that — so browsing history doesn't mean leaving a session running. -->
+      <div id="session-strip" class="session-strip" hidden>
+        <span class="state"><span class="dot"></span><span id="session-state"></span></span>
+        <span id="session-since" class="since"></span>
+        <div id="session-controls" class="session-controls"></div>
+      </div>
 
       <section id="list-view">
         <h2>Past sessions</h2>

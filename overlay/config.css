@@ -190,6 +190,24 @@ select:focus {
   margin-top: 1.5rem;
 }
 
+/* Session section: Pause / Stop / Start-new sit together, with a live state
+   line that turns red whenever nothing is being recorded. */
+.session-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.session-state {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.session-state.not-recording {
+  color: var(--accent);
+}
+
 .btn-remove {
   background: transparent;
   border: 1px solid #3a4257;

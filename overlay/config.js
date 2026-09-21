@@ -76,10 +76,13 @@
 
   // -- live session state --------------------------------------------------
   // The setup page listens on the telemetry WebSocket so Start-new-session
-  // knows whether the current session already has data worth confirming over.
+  // knows whether the current session already has data worth confirming over,
+  // and so the recording state (recording / paused / stopped) is shown live.
   // (Live per-strap status is visible in the overlay preview itself.)
 
   const live = new Map(); // participantId -> latest participant message
+  let sessionState = "recording";
+  let sessionStartedAt = null;
 
   function connectLive() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -94,6 +97,9 @@
       if (msg.type !== "state" || !Array.isArray(msg.participants)) return;
       live.clear();
       for (const p of msg.participants) live.set(p.participantId, p);
+      sessionState = msg.sessionState || "recording";
+      sessionStartedAt = msg.sessionStartedAt || null;
+      renderSessionState();
     });
     // The server may restart (or the page may outlive it); keep retrying.
     ws.addEventListener("close", () => setTimeout(connectLive, 2000));
@@ -110,6 +116,47 @@
     // The overlay targets a 1920x1080 canvas; render it full-size in the
     // iframe and scale it down to the preview's width.
     frameEl.style.transform = `scale(${previewEl.clientWidth / 1920})`;
+  }
+
+  // Recording state line + the Pause/Resume and Stop buttons that drive it.
+  const sessionStateEl = document.getElementById("session-state");
+  const pauseBtn = document.getElementById("pause-session");
+  const stopBtn = document.getElementById("stop-session");
+
+  function renderSessionState() {
+    const started = sessionStartedAt ? new Date(sessionStartedAt) : null;
+    const at =
+      started && !isNaN(started)
+        ? started.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : null;
+    if (sessionState === "recording") {
+      sessionStateEl.textContent = at
+        ? `● Recording — session started ${at}.`
+        : "● Ready — the next reading starts a session.";
+    } else if (sessionState === "paused") {
+      sessionStateEl.textContent = at
+        ? `⏸ Paused — nothing is being recorded (session from ${at} is kept).`
+        : "⏸ Paused — nothing is being recorded.";
+    } else {
+      sessionStateEl.textContent =
+        "⏹ Stopped — nothing is being recorded, and readings won't start a session.";
+    }
+    sessionStateEl.className =
+      "session-state" + (sessionState === "recording" ? "" : " not-recording");
+    pauseBtn.textContent = sessionState === "paused" ? "▶ Resume" : "⏸ Pause";
+    pauseBtn.hidden = sessionState === "stopped";
+    stopBtn.disabled = sessionState === "stopped";
+  }
+
+  async function sessionAction(action) {
+    try {
+      const res = await fetch("/api/session/" + action, { method: "POST" });
+      if (!res.ok) throw new Error((await res.text()) || res.statusText);
+      return true;
+    } catch (err) {
+      setStatus(`Could not ${action} the session: ${err.message}`, "err");
+      return false;
+    }
   }
 
   function hasSessionData() {
@@ -246,6 +293,7 @@
   async function newSession() {
     if (
       hasSessionData() &&
+      sessionState === "recording" &&
       !confirm(
         "Start a new session? On-screen stats and sparklines reset for everyone. " +
           "(The finished session is kept in history.)"
@@ -253,14 +301,30 @@
     ) {
       return;
     }
-    try {
-      const res = await fetch("/api/new-session", { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-      // The preview resets over the WebSocket; the clock confirms it too.
-      setStatus("New session started.", "ok");
-    } catch (err) {
-      setStatus("Could not start a new session: " + err.message, "err");
+    // The preview resets over the WebSocket; the clock confirms it too.
+    if (await sessionAction("new")) setStatus("New session started.", "ok");
+  }
+
+  async function togglePause() {
+    if (sessionState === "paused") {
+      if (await sessionAction("resume")) setStatus("Recording resumed.", "ok");
+    } else if (await sessionAction("pause")) {
+      setStatus("Paused — the session is kept, but nothing is recorded.", "ok");
     }
+  }
+
+  async function stopSession() {
+    if (
+      hasSessionData() &&
+      sessionState !== "stopped" &&
+      !confirm(
+        "Stop the session? Recording stops until you start a new one, and the " +
+          "overlay panels clear. (The finished session is kept in history.)"
+      )
+    ) {
+      return;
+    }
+    if (await sessionAction("stop")) setStatus("Session stopped — not recording.", "ok");
   }
 
   async function quit() {
@@ -281,12 +345,15 @@
   document.getElementById("scan").addEventListener("click", (e) => scan(e.currentTarget));
   document.getElementById("save").addEventListener("click", save);
   document.getElementById("new-session").addEventListener("click", newSession);
+  pauseBtn.addEventListener("click", togglePause);
+  stopBtn.addEventListener("click", stopSession);
   document.getElementById("quit").addEventListener("click", quit);
 
   window.addEventListener("resize", sizePreview);
   sizePreview();
 
   setupOverlayLinks();
+  renderSessionState();
   connectLive();
   load();
 })();
