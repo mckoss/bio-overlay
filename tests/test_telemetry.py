@@ -249,6 +249,113 @@ async def test_idle_session_auto_closes():
     assert snap["participants"][0]["session"] == {"min": 90, "max": 90, "avg": 90, "count": 1}
 
 
+async def test_pause_keeps_session_but_records_nothing(hub):
+    recorded = []
+    hub.set_recorder(lambda *args: recorded.append(args))
+    await hub.update_measurement("participant-1", bpm=120)
+    started = hub.snapshot()["sessionStartedAt"]
+
+    await hub.pause_session()
+    await hub.update_measurement("participant-1", bpm=180, rr_intervals_ms=[333.0])
+
+    snap = hub.snapshot()
+    p1 = snap["participants"][0]
+    assert snap["sessionState"] == "paused"
+    # The session and its stats survive a pause...
+    assert snap["sessionStartedAt"] == started
+    assert p1["session"] == {"min": 120, "max": 120, "avg": 120, "count": 1}
+    assert len(p1["samples"]) == 1
+    # ...nothing new is accumulated or written to history...
+    assert len(recorded) == 1
+    # ...but the live reading still tracks the strap.
+    assert p1["bpm"] == 180
+    assert p1["active"] is True
+
+    await hub.resume_session()
+    await hub.update_measurement("participant-1", bpm=130)
+    snap = hub.snapshot()
+    assert snap["sessionState"] == "recording"
+    assert snap["sessionStartedAt"] == started  # same session continues
+    assert snap["participants"][0]["session"]["count"] == 2
+    assert len(recorded) == 2
+
+
+async def test_pause_does_not_attribute_the_paused_span_to_a_zone(hub):
+    await hub.update_measurement("participant-1", bpm=100)
+    await hub.update_measurement("participant-1", bpm=100)
+    before = sum(hub.snapshot()["participants"][0]["zoneTimesMs"])
+    await hub.pause_session()
+    await asyncio.sleep(0.05)
+    await hub.resume_session()
+    await hub.update_measurement("participant-1", bpm=100)
+    # The first reading after a resume starts a fresh interval, so the paused
+    # span adds nothing (the resumed reading has no predecessor to measure from).
+    assert sum(hub.snapshot()["participants"][0]["zoneTimesMs"]) == before
+
+
+async def test_stop_closes_session_and_ignores_later_readings(hub):
+    recorded = []
+    hub.set_recorder(lambda *args: recorded.append(args))
+    await hub.update_measurement("participant-1", bpm=120)
+
+    await hub.stop_session()
+    snap = hub.snapshot()
+    assert snap["sessionState"] == "stopped"
+    assert snap["sessionStartedAt"] is None
+    assert snap["participants"][0]["active"] is False
+
+    # Readings from a strap left transmitting must not open a new session.
+    await hub.update_measurement("participant-1", bpm=95)
+    await hub.set_connected("participant-2", True)
+    snap = hub.snapshot()
+    states = {p["participantId"]: p for p in snap["participants"]}
+    assert snap["sessionStartedAt"] is None
+    assert states["participant-1"]["active"] is False
+    assert states["participant-1"]["session"]["count"] == 0
+    assert states["participant-2"]["active"] is False
+    assert len(recorded) == 1  # nothing recorded while stopped
+    # Live link state is still tracked, so the setup page can show the strap.
+    assert states["participant-1"]["bpm"] == 95
+    assert states["participant-2"]["connected"] is True
+
+
+async def test_new_session_restarts_recording_after_stop(hub):
+    await hub.update_measurement("participant-1", bpm=120)
+    await hub.stop_session()
+    await hub.reset_session()
+
+    assert hub.snapshot()["sessionState"] == "recording"
+    await hub.update_measurement("participant-1", bpm=88)
+    snap = hub.snapshot()
+    assert snap["sessionStartedAt"] is not None
+    assert snap["participants"][0]["session"] == {"min": 88, "max": 88, "avg": 88, "count": 1}
+
+
+async def test_watchdog_leaves_paused_session_alone():
+    h = TelemetryHub(stale_after_s=0.1, idle_close_s=0.2)
+    h.register_participant("p1", "One")
+    closed = []
+    h.set_session_close_callback(lambda: closed.append(True))
+    await h.update_measurement("p1", bpm=100)
+    started = h.snapshot()["sessionStartedAt"]
+    await h.pause_session()
+    h.start_watchdog()
+    try:
+        await asyncio.sleep(0.5)
+    finally:
+        await h.stop_watchdog()
+
+    # A pause is idle on purpose: the idle auto-close must not fire.
+    snap = h.snapshot()
+    assert snap["sessionState"] == "paused"
+    assert snap["sessionStartedAt"] == started
+    assert closed == []
+
+
+async def test_snapshot_defaults_to_recording(hub):
+    assert hub.snapshot()["sessionState"] == "recording"
+
+
 async def test_watchdog_marks_stale(hub):
     received = []
 

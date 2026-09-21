@@ -34,12 +34,21 @@
       <section>
         <div class="section-head">
           <h2>Session &amp; overlay</h2>
-          <button id="new-session" class="btn btn-primary">▶ Start new session</button>
+          <div class="session-buttons">
+            <button id="pause-session" class="btn">⏸ Pause</button>
+            <button id="stop-session" class="btn">⏹ Stop</button>
+            <button id="new-session" class="btn btn-primary">▶ Start new session</button>
+          </div>
         </div>
+        <p id="session-state" class="session-state"></p>
         <p class="hint">
           Live preview of the overlay — click it to open the full-size page.
-          Starting a new session clears the stats and sparklines for a fresh
-          start (past sessions stay in <a href="/history">history</a>).
+          <strong>Pause</strong> keeps the session but records nothing;
+          <strong>Stop</strong> ends it and stays off — readings are ignored
+          until you start a new one, so leaving the app running (to browse
+          history, say) can't accrue stray sessions. Starting a new session
+          clears the stats and sparklines for a fresh start. Finished sessions
+          stay in <a href="/history">history</a>.
         </p>
         <a
           id="overlay-preview"

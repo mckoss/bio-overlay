@@ -5,6 +5,7 @@
  */
 
 import { createOverlayRenderer } from "./overlay/render.js";
+import { createSessionBadge, createSessionControls } from "./session-controls.js";
 
 const WS_PATH = "/ws";
 const RECONNECT_MIN_MS = 500;
@@ -16,6 +17,18 @@ const renderer = createOverlayRenderer({
   panelsEl: document.getElementById("panels"),
   clockEl: document.getElementById("session-clock"),
 });
+
+// The badge shows everywhere the overlay does (including the setup page's
+// preview iframe and OBS); the buttons are for a real browser tab only, so
+// they never end up in the video or in the tiny preview.
+const badge = createSessionBadge(document.getElementById("session-badge"));
+const controls =
+  window.top === window.self
+    ? createSessionControls(document.getElementById("session-controls"), {
+        hoverReveal: true,
+        links: true,
+      })
+    : null;
 
 // Debug/keying aid: `?bg=green` (or any CSS color) paints the otherwise
 // transparent background so you can see exactly which area is overlay vs
@@ -46,7 +59,11 @@ function connect() {
   ws.addEventListener("message", (event) => {
     try {
       const msg = JSON.parse(event.data);
-      if (msg.type === "state") renderer.render(msg);
+      if (msg.type !== "state") return;
+      renderer.render(msg);
+      const sessionState = msg.sessionState || "recording";
+      badge.update(sessionState);
+      if (controls) controls.update(sessionState);
     } catch (err) {
       console.error("bad telemetry message", err);
     }

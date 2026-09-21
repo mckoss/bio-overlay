@@ -1,0 +1,163 @@
+/*
+ * Session badge + controls (desktop app only), shared by the overlay page and
+ * the history page. The overlay is composited over live video, so the badge is
+ * loud on purpose and the buttons are deliberately small and only revealed by
+ * mouse movement (see session-controls.js).
+ */
+
+.session-badge,
+.session-controls {
+  --sc-red: #ff2e33;
+  --sc-bg: rgba(0, 0, 0, 0.62);
+  --sc-text: #fff;
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Red "not recording" badge, bottom center just above the session clock —
+   the panels own the top of the frame, and a paused session still shows them. */
+.session-badge {
+  position: absolute;
+  bottom: 7vh;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 0.35rem 1rem;
+  border: 2px solid var(--sc-red);
+  border-radius: 1.2rem;
+  background: var(--sc-bg);
+  color: var(--sc-red);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: pointer;
+  text-shadow: 0 0.1rem 0.4rem rgba(0, 0, 0, 0.9);
+  animation: session-badge-pulse 2s ease-in-out infinite;
+}
+
+.session-badge[hidden] {
+  display: none;
+}
+
+@keyframes session-badge-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-badge {
+    animation: none;
+  }
+}
+
+/* Button bar, in the bottom-left corner clear of the cards and the clock.
+   Hidden until the mouse moves (OBS sends no mouse events, so it never
+   appears in the video). */
+.session-controls {
+  position: absolute;
+  bottom: 2.5vh;
+  left: 2.5vw;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  /* Stay clear of the centred session clock: extra buttons wrap upward
+     inside the left third of the frame rather than running into it. */
+  max-width: 34vw;
+  gap: 0.4rem;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.session-controls.revealed {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.session-btn {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 1rem;
+  background: var(--sc-bg);
+  color: var(--sc-text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+}
+
+.session-btn:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.session-btn.primary {
+  border-color: var(--sc-red);
+  color: var(--sc-red);
+}
+
+.session-btn.danger:hover {
+  border-color: var(--sc-red);
+  color: var(--sc-red);
+}
+
+/*
+ * History-page strip: the same controls as a normal page element (no absolute
+ * positioning, no hover reveal), so recording can be stopped without leaving
+ * the page you're actually reading.
+ */
+.session-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 0.6rem 0 1.2rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.session-strip.not-recording {
+  border-color: rgba(255, 46, 51, 0.65);
+  background: rgba(255, 46, 51, 0.08);
+}
+
+.session-strip .state {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.session-strip .dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #2ecc71;
+}
+
+.session-strip.not-recording .dot {
+  background: #ff2e33;
+}
+
+.session-strip.not-recording .state {
+  color: #ff5c60;
+}
+
+.session-strip .since {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.session-strip .session-controls {
+  position: static;
+  transform: none;
+  margin-left: auto;
+}
