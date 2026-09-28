@@ -1,12 +1,16 @@
 """Command-line entry point.
 
 Subcommands:
+    app        Open the desktop app window (the default; supervises `run`).
     scan       Discover nearby BLE straps and print their device IDs.
     run        Start the telemetry server + BLE collector (needs hardware).
     simulate   Start the telemetry server + simulated data (no hardware).
 
 `run` and `simulate` serve the overlay at http://<host>:<port>/ for use as an
 OBS Browser Source, and the setup page at /config to edit config and pair straps.
+
+`app` is what double-clicking the packaged application does: it shows the setup
+page in a window and runs `run` as a child process that it stops on the way out.
 """
 
 from __future__ import annotations
@@ -16,11 +20,12 @@ import asyncio
 import logging
 import signal
 import sys
+import threading
 import webbrowser
 from pathlib import Path
 
-from . import __version__
-from .config import AppConfig
+from . import __version__, instance
+from .config import DEFAULT_PORT, AppConfig
 from .paths import default_config_path, default_history_dir
 from .server import PortInUseError, run_server
 from .telemetry import STOPPED, TelemetryHub
@@ -38,6 +43,16 @@ def _load_config(args: argparse.Namespace) -> AppConfig:
         logging.info(
             "loaded config from %s (%d participant(s))", path, len(config.participants)
         )
+        if config.port_migrated:
+            # Saved configs from before 2.0 pin the old shared default. Rewrite
+            # it once so the file and the running app agree.
+            config.save(path)
+            logging.info(
+                "migrated the default port in %s to %d "
+                "(update your OBS Browser Source URL)",
+                path,
+                config.port,
+            )
     elif args.config:
         # An explicit -c pointing at a missing file is an error, not a silent
         # fall-through to defaults (which looks like an "empty" config).
@@ -61,14 +76,47 @@ def _should_open_browser(args: argparse.Namespace) -> bool:
 
 
 def _should_port_scan(args: argparse.Namespace) -> bool:
-    """Scan for a free port by default; an explicit --port is strict unless
-    --port-scan is also given."""
-    return bool(getattr(args, "port_scan", False)) or getattr(args, "port", None) is None
+    """Only scan when asked.
+
+    This used to be the default, so a second launch silently bound the next port
+    up instead of colliding — two collectors on the same straps, and an OBS
+    Browser Source still pointed at the first one. On a port that is ours alone,
+    a collision is information, not an obstacle to route around.
+    """
+    return bool(getattr(args, "port_scan", False))
 
 
 def _browser_host(host: str) -> str:
     # A wildcard bind isn't browsable; point the browser at loopback.
     return "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+
+
+def _watch_supervisor(loop: asyncio.AbstractEventLoop, stop: asyncio.Event) -> None:
+    """Shut down when the window process that launched us goes away.
+
+    A parent's exit does not kill its children on macOS or Windows — orphans are
+    reparented and keep running, which is how a server from an earlier session
+    could still be holding the straps hours later. The window process hands us
+    its end of a pipe as stdin and never writes to it, so anything that ends the
+    parent (clean quit, crash, Force Quit, kill -9) closes that pipe and we read
+    EOF here. Setting `stop` runs the same orderly shutdown a signal would:
+    collector stopped, history flushed, port released.
+    """
+    stream = getattr(sys.stdin, "buffer", None)
+    if stream is None:  # pragma: no cover - no stdin to inherit
+        logging.warning("--supervised: no stdin to watch, so a parent exit won't be seen")
+        return
+
+    def wait_for_eof() -> None:
+        try:
+            while stream.read(1):
+                pass  # The supervisor never writes; anything read is discarded.
+        except OSError:
+            pass
+        logging.info("supervisor exited; shutting down")
+        loop.call_soon_threadsafe(stop.set)
+
+    threading.Thread(target=wait_for_eof, name="supervisor-watchdog", daemon=True).start()
 
 
 def _build_hub(config: AppConfig, *, enable_respiration: bool = False) -> TelemetryHub:
@@ -96,6 +144,7 @@ async def _serve_with_source(
     open_browser: bool = False,
     port_scan: bool = False,
     enable_respiration: bool = False,
+    supervised: bool = False,
 ) -> None:
     """Run the server alongside a telemetry source (collector or simulator).
 
@@ -177,9 +226,20 @@ async def _serve_with_source(
     # --no-history), so resolve a directory to read from regardless.
     history_read_dir = history_dir or str(default_history_dir())
 
-    # The Quit button on the setup page POSTs /api/quit, which sets this.
+    # Set to end the run: by a signal, or by the supervising window process
+    # going away (see _watch_supervisor).
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
+
+    if not port_scan:
+        # Ask the port who is holding it before trying to bind, so a forgotten
+        # instance reports itself by version and pid instead of surfacing as a
+        # bare "address already in use".
+        running = await asyncio.to_thread(
+            instance.probe_after_grace, config.host, config.port
+        )
+        if running is not None:
+            raise instance.AlreadyRunningError(running)
 
     runner, port = await run_server(
         hub,
@@ -191,7 +251,6 @@ async def _serve_with_source(
         port_scan=port_scan,
         history_dir=history_read_dir,
         history_writer=writer,
-        request_shutdown=lambda: loop.call_soon_threadsafe(stop.set),
         session_control=session_control,
     )
 
@@ -208,6 +267,9 @@ async def _serve_with_source(
             loop.add_signal_handler(sig, stop.set)
         except NotImplementedError:  # pragma: no cover - non-unix
             pass
+
+    if supervised:
+        _watch_supervisor(loop, stop)
 
     source_task = asyncio.create_task(source.run()) if source else None
     try:
@@ -264,6 +326,7 @@ async def _cmd_run(args: argparse.Namespace) -> None:
         open_browser=_should_open_browser(args),
         port_scan=_should_port_scan(args),
         enable_respiration=args.respire_experiment,
+        supervised=args.supervised,
     )
 
 
@@ -278,7 +341,25 @@ async def _cmd_simulate(args: argparse.Namespace) -> None:
         open_browser=_should_open_browser(args),
         port_scan=_should_port_scan(args),
         enable_respiration=args.respire_experiment,
+        supervised=args.supervised,
     )
+
+
+def _cmd_app(args: argparse.Namespace) -> None:
+    """Open the app window, which runs and supervises the server.
+
+    Synchronous on purpose: the macOS window server requires NSApplication to
+    own the main thread, so this command runs there rather than inside
+    asyncio.run() like the others.
+    """
+    from .window import WindowError, run_window
+
+    config = _load_config(args)
+    config_path = _resolve_config_path(args)
+    try:
+        run_window(args, config, config_path)
+    except WindowError as exc:
+        sys.exit(f"\nError: {exc}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -289,6 +370,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version", action="version", version=f"bio-overlay {__version__}"
     )
+    # `app` overrides this: it needs the main thread, so it isn't run under
+    # asyncio.run() like every other subcommand.
+    parser.set_defaults(blocking=False)
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_scan = sub.add_parser("scan", help="discover nearby BLE straps")
@@ -298,20 +382,37 @@ def build_parser() -> argparse.ArgumentParser:
     p_scan.set_defaults(func=_cmd_scan)
 
     for name, func, help_text in (
+        ("app", _cmd_app, "open the app window (default when double-clicked)"),
         ("run", _cmd_run, "collect from real straps and serve the overlay"),
         ("simulate", _cmd_simulate, "serve the overlay with simulated data"),
     ):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("-c", "--config", help="path to config.json")
         p.add_argument("--host", help="server bind host (default 127.0.0.1)")
-        p.add_argument("--port", type=int, help="server port (default 8080)")
         p.add_argument(
-            "--port-scan",
-            action="store_true",
-            help="if the port is busy, pick the next free one "
-            "(default unless --port is given explicitly)",
+            "--port", type=int, help=f"server port (default {DEFAULT_PORT})"
         )
-        if name == "run":
+        if name in ("run", "simulate"):
+            p.add_argument(
+                "--port-scan",
+                action="store_true",
+                help="if the port is busy, pick the next free one instead of "
+                "reporting the instance already running there",
+            )
+            # The setup page opens in the browser on start by default. The app
+            # window passes --no-browser, since it is the front end itself.
+            p.add_argument(
+                "--no-browser",
+                action="store_true",
+                help="do not auto-open the setup page in a browser",
+            )
+            p.add_argument(
+                "--supervised",
+                action="store_true",
+                help="exit when the parent process does, by watching stdin for "
+                "EOF (set by the app window; not useful on its own)",
+            )
+        if name in ("app", "run"):
             # Real readings are persisted to history/YYYY-MM-DD.json; simulated
             # data is never written there.
             p.add_argument(
@@ -325,19 +426,14 @@ def build_parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="do not write the daily history file",
             )
-        # The setup page opens in the browser on start by default.
-        p.add_argument(
-            "--no-browser",
-            action="store_true",
-            help="do not auto-open the setup page in a browser",
-        )
         # Respiration is an experimental RSA-derived estimate, hidden by default.
         p.add_argument(
             "--respire-experiment",
             action="store_true",
             help="show the experimental respiration (breaths/min) estimate in the overlay",
         )
-        p.set_defaults(func=func)
+        # `app` owns the main thread for the window server; see _cmd_app.
+        p.set_defaults(func=func, blocking=(name == "app"))
 
     return parser
 
@@ -345,10 +441,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     if argv is None:
         argv = sys.argv[1:]
-    # No arguments (e.g. double-clicking the executable, or a bare `bio-overlay`)
-    # defaults to `run`, which starts collecting and opens the setup page.
+    # No arguments (e.g. double-clicking the app, or a bare `bio-overlay`)
+    # defaults to `app`: a window, with the server as its child. `run` remains
+    # the headless form for terminals and scripts.
     if not argv:
-        argv = ["run"]
+        argv = ["app"]
     args = build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -356,9 +453,28 @@ def main(argv: list[str] | None = None) -> None:
         datefmt="%H:%M:%S",
     )
     try:
-        asyncio.run(args.func(args))
+        if args.blocking:
+            args.func(args)
+        else:
+            asyncio.run(args.func(args))
     except KeyboardInterrupt:
         pass
+    except instance.AlreadyRunningError as exc:
+        running = exc.running
+        print(f"\nError: {running.describe()} is already running.", file=sys.stderr)
+        print(
+            "Two copies fight over the same straps, so this one stopped instead.",
+            file=sys.stderr,
+        )
+        print("Fix it by either:", file=sys.stderr)
+        print(
+            "  • using the copy that's running: "
+            f"http://127.0.0.1:{running.port}/config",
+            file=sys.stderr,
+        )
+        if running.pid is not None:
+            print(f"  • stopping it:  kill {running.pid}", file=sys.stderr)
+        sys.exit(1)
     except PortInUseError as exc:
         port = exc.port
         prog = "bio-overlay"
@@ -367,9 +483,11 @@ def main(argv: list[str] | None = None) -> None:
             print(
                 f"Ports {port}–{exc.last_tried} are all busy.", file=sys.stderr
             )
-        print("Another bio-overlay window may already be running.", file=sys.stderr)
+        # Not bio-overlay: /healthz was probed first and something else answered
+        # (or nothing did).
+        print("Something other than bio-overlay is holding it.", file=sys.stderr)
         print("Fix it by either:", file=sys.stderr)
-        print(f"  • choosing a port:        {prog} --port 8090", file=sys.stderr)
+        print(f"  • choosing a port:        {prog} --port 24700", file=sys.stderr)
         print(f"  • auto-picking a free one: {prog} --port-scan", file=sys.stderr)
         sys.exit(1)
 

@@ -121,17 +121,16 @@ trainer/client version): [web/README.md](web/README.md).
 
 Prebuilt apps for **macOS (Apple Silicon)** and **Windows (x64)** are attached
 to each [GitHub Release](https://github.com/mckoss/bio-overlay/releases). With no
-arguments the app starts collecting and **automatically opens the setup page** in
-your browser, where you can add participants, pair straps, and copy the URL to
-paste into OBS (it also links straight to the overlay). It auto-picks a free
-port, so it works even if a copy is already running.
+arguments the app opens **its own window** showing the setup page, where you can
+add participants, pair straps, and copy the URL to paste into OBS (it also links
+straight to the overlay). It starts collecting as soon as it opens.
 
 - **macOS** — download `bio-overlay-macos-arm64.zip`, unzip it, and double-click
   `bio-overlay.app`. It's unsigned, so the first time **right-click → Open** to
   get past Gatekeeper, then **Allow** the Bluetooth prompt. The app is also a
   normal CLI tool — run the binary inside it from Terminal with arguments:
   ```bash
-  bio-overlay.app/Contents/MacOS/bio-overlay run --port 9000
+  bio-overlay.app/Contents/MacOS/bio-overlay run --port 24700
   # optional convenience symlink onto your PATH:
   ln -sf "$PWD/bio-overlay.app/Contents/MacOS/bio-overlay" /usr/local/bin/bio-overlay
   ```
@@ -142,13 +141,19 @@ port, so it works even if a copy is already running.
 When run as a packaged app, config and history live in `~/Documents/Bio-Overlay/`
 (see [Where files are stored](#where-files-are-stored)).
 
-**Stopping the app:** bio-overlay runs as a background process with **no window**
-(on macOS, no Dock icon either). Stop it with the **Quit bio-overlay** button at
-the bottom of the setup page (`/config`). Fallbacks:
+**Stopping the app:** close its window (or **⌘Q** on macOS). That stops
+collecting too — the server runs as a child of the window and shuts itself down
+(flushing history) when the window goes away, even if the app crashes or is
+force-quit. If you started it from a terminal with `run`, press **Ctrl-C**.
 
-- **macOS** — quit "bio-overlay" from **Activity Monitor**.
-- **Windows** — end the "bio-overlay" process from **Task Manager** (Details tab).
-- **Either** — press **Ctrl-C** if you launched it from a terminal.
+**Only one copy runs at a time.** bio-overlay uses its own port, **24600**. If a
+copy is already running there — say, an older version you forgot about — a new
+launch says so by version and pid and stops, rather than starting a second
+collector that fights the first over the same straps.
+
+> **Upgrading from 1.x:** the default port moved from 8080 to 24600. A saved
+> config that still says 8080 is migrated on first launch; re-copy the overlay
+> URL from the setup page into your OBS Browser Source.
 
 ## Install from source (macOS)
 
@@ -170,7 +175,7 @@ history default to the current directory (`./config.json`, `./history/`).
 No hardware (simulated data) — good for building the overlay and OBS scene:
 
 ```bash
-bio-overlay simulate            # then open http://127.0.0.1:8080/
+bio-overlay simulate            # then open http://127.0.0.1:24600/
 ```
 
 With real straps:
@@ -178,7 +183,7 @@ With real straps:
 ```bash
 cp config.example.json config.json
 bio-overlay scan                # discover straps; copy each deviceId into config.json
-bio-overlay run                 # then open http://127.0.0.1:8080/
+bio-overlay run                 # then open http://127.0.0.1:24600/
 ```
 
 > **macOS Bluetooth permission:** the first BLE access pops a system permission
@@ -191,8 +196,8 @@ bio-overlay run                 # then open http://127.0.0.1:8080/
 ### Setup page (no JSON editing)
 
 The easiest way to configure participants and pair straps is the built-in setup
-page at `/config`, which opens automatically when you start the app (`bio-overlay`
-or `bio-overlay run`). It's also served at `http://127.0.0.1:8080/config`.
+page at `/config`. The desktop app shows it in its window; `bio-overlay run`
+opens it in your browser. It's also served at `http://127.0.0.1:24600/config`.
 
 From there you can add/remove participants, edit each one's name/id/deviceId,
 **Scan** for nearby straps to assign (pair) them to a participant, and copy the
@@ -210,13 +215,12 @@ Where the app looks for it: `-c PATH` if given; otherwise `./config.json` in
 the **current directory** when running from source, or
 `~/Documents/Bio-Overlay/config.json` when running the packaged app. If no
 file is found, built-in defaults are used (two unbound participants,
-`127.0.0.1:8080`). The setup page header shows exactly which file is being
+`127.0.0.1:24600`). The setup page header shows exactly which file is being
 edited.
 
 ```json
 {
   "host": "127.0.0.1",
-  "port": 8080,
   "staleAfterSeconds": 5.0,
   "participants": [
     {
@@ -233,7 +237,7 @@ edited.
 
 | Field | Meaning |
 | --- | --- |
-| `host` / `port` | Address the overlay server binds to. `port` is also the OBS Browser Source URL port. |
+| `host` / `port` | Address the overlay server binds to. `port` is optional (default `24600`) and is also the OBS Browser Source URL port; leave it out unless you need a different one. |
 | `staleAfterSeconds` | If no fresh reading arrives within this many seconds, the card shows a "no signal" stale state. |
 | `participants[]` | One entry per person (max two). |
 | `participants[].id` | Stable internal key. Used as the panel key and the log/history key — keep it short and file-safe (e.g. `mike-koss`). |
@@ -269,25 +273,35 @@ Discover nearby BLE straps and print their `deviceId` and macOS address.
 | `--name-prefix STR` | `Polar` | Only show devices whose name starts with this. |
 | `--all` | off | Show all BLE devices (ignore the name filter). |
 
+### `bio-overlay app`
+Open the desktop app window. This is what double-clicking the app (or a bare
+`bio-overlay`) does. It runs `bio-overlay run` as a child process and stops it
+when the window closes. Accepts `-c/--config`, `--host`, `--port`,
+`--history-dir`, `--no-history`, and `--respire-experiment`. From source it
+needs the `app` extra (`pip install -e ".[app]"`); without it, it falls back to
+opening the setup page in your browser.
+
 ### `bio-overlay run`
-Collect from real straps and serve the overlay.
+Collect from real straps and serve the overlay, with no window — for terminals
+and scripts.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `-c, --config PATH` | built-in defaults | Path to `config.json`. |
 | `--host HOST` | `127.0.0.1` | Override the bind host. |
-| `--port PORT` | `8080` | Use this exact port (strict — errors if busy). |
-| `--port-scan` | on unless `--port` given | If the port is busy, pick the next free one. |
+| `--port PORT` | `24600` | Use this port. |
+| `--port-scan` | off | If the port is busy, pick the next free one. |
 | `--history-dir DIR` | data dir `/history` | Directory for daily history files. |
 | `--no-history` | off | Don't write the daily history file. |
 | `--no-browser` | off | Don't auto-open the setup page on start. |
 | `--respire-experiment` | off | Show the experimental breaths/min estimate on each card. |
 
-By default (no explicit `--port`) bio-overlay auto-picks a free port starting at
-8080, so double-clicking the app "just works" even if another copy is running.
-Passing `--port N` is strict: if that exact port is busy it prints a short
-message (not a stack trace). Add `--port-scan` to make an explicit port fall
-back to scanning.
+If the port is busy, bio-overlay asks what is holding it. If it's another
+bio-overlay, it reports that copy's version and pid and exits instead of
+starting a second collector; if it's something else, it says so and suggests
+`--port` or `--port-scan`. Before 2.0, port scanning was the default, which is
+how a forgotten copy could keep running unnoticed on 8080 while a new one
+quietly took 8081.
 
 ### `bio-overlay simulate`
 Serve the overlay with synthetic data (no hardware, no history file written).
@@ -295,8 +309,8 @@ Accepts `-c/--config`, `--host`, `--port`, `--port-scan`, `--no-browser`, and
 `--respire-experiment`.
 
 Running with **no arguments** (e.g. double-clicking the executable, or a bare
-`bio-overlay`) is the same as `run`. Both `run` and `simulate` open the setup
-page in the browser on start; pass `--no-browser` to suppress it.
+`bio-overlay`) is the same as `app`. `run` and `simulate` open the setup page in
+the browser on start; pass `--no-browser` to suppress it.
 
 ## Where files are stored
 
@@ -325,7 +339,7 @@ data (`simulate`) never writes a history file.
 
 ## The overlay page
 
-Open `http://<host>:<port>/` (default `http://127.0.0.1:8080/`).
+Open `http://<host>:<port>/` (default `http://127.0.0.1:24600/`).
 
 - The background is **truly transparent** (real alpha) for OBS. In a normal
   browser it looks like dark cards on white — that's just the browser's page
@@ -334,13 +348,13 @@ Open `http://<host>:<port>/` (default `http://127.0.0.1:8080/`).
 - When recording is paused or stopped, a **red "NOT RECORDING" badge** appears
   above the session clock — on purpose, it shows in OBS too, so a stopped
   session can't go unnoticed on camera. Click it to start recording again.
-- Session buttons (Pause / Stop / Start new session / Quit, plus links to the
+- Session buttons (Pause / Stop / Start new session, plus links to the
   setup and history pages) fade in at the bottom-left **when you move the
   mouse** over the page, and fade out again a few seconds later. OBS Browser
   Sources never send mouse events, so the buttons never appear in your video.
 - Debug aid: append `?bg=green` (or any CSS color) to paint the transparent
   background so you can see exactly which area is overlay vs see-through, e.g.
-  `http://127.0.0.1:8080/?bg=magenta`. Leave it off for OBS.
+  `http://127.0.0.1:24600/?bg=magenta`. Leave it off for OBS.
 
 ## OBS setup
 
@@ -352,11 +366,11 @@ result as a "virtual camera" that Zoom can select. Download it (free) from
 
 1. **Make sure bio-overlay is running.** Start the app (it opens the setup page);
    pair your straps, then keep it running. The overlay lives at
-   `http://127.0.0.1:8080/` (your port may differ if 8080 was busy — the setup
-   page shows the exact overlay URL and has a copy button).
+   `http://127.0.0.1:24600/` (the setup page shows the exact overlay URL and
+   has a copy button).
 2. **Add the overlay.** In OBS: Sources → **+** → **Browser** → name it
    "bio-overlay" → **OK**.
-   - **URL:** the overlay URL from the setup page (e.g. `http://127.0.0.1:8080/`).
+   - **URL:** the overlay URL from the setup page (e.g. `http://127.0.0.1:24600/`).
    - **Width / Height:** `1920` × `1080` (match your OBS base canvas; the cards
      are sized for a 1920×1080 canvas).
    - **Uncheck** "Shutdown source when not visible" so the WebSocket stays alive

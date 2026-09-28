@@ -100,11 +100,6 @@
   color: var(--sc-red);
 }
 
-.session-btn.danger:hover {
-  border-color: var(--sc-red);
-  color: var(--sc-red);
-}
-
 /*
  * History-page strip: the same controls as a normal page element (no absolute
  * positioning, no hover reveal), so recording can be stopped without leaving

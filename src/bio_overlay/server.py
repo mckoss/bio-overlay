@@ -9,7 +9,7 @@ Endpoints:
     GET  /config      -> overlay/config.html (setup UI)
     GET  /<file>      -> static overlay assets
     GET  /ws          -> WebSocket; receives {"type": "state", ...} snapshots
-    GET  /healthz     -> liveness probe
+    GET  /healthz     -> identity probe (app name, version, pid, port)
     GET  /api/config  -> current config as JSON
     PUT  /api/config  -> save config to disk
     GET  /api/scan    -> discover nearby straps (deviceId, name, address)
@@ -22,8 +22,10 @@ from __future__ import annotations
 import errno
 import json
 import logging
+import os
 import re
 import sys
+import time
 from pathlib import Path
 
 from aiohttp import WSCloseCode, WSMsgType, web
@@ -178,8 +180,30 @@ async def _api_session(request: web.Request) -> web.Response:
     return web.json_response(session)
 
 
-async def _healthz(_request: web.Request) -> web.Response:
-    return web.json_response({"ok": True})
+# Marks a /healthz response as coming from bio-overlay and not from whatever
+# else happens to be listening. instance.probe() requires this exact value.
+APP_ID = "bio-overlay"
+
+
+async def _healthz(request: web.Request) -> web.Response:
+    """Identity probe: who is holding this port, which version, since when.
+
+    A plain liveness boolean was not enough to tell a running copy of the app
+    apart from an unrelated server, which is what let a stale instance masquerade
+    as a fresh one.
+    """
+    identity = request.app["identity"]
+    started = identity["started_at"]
+    return web.json_response(
+        {
+            "ok": True,
+            "app": APP_ID,
+            "version": __version__,
+            "pid": os.getpid(),
+            "port": identity["port"],
+            "uptimeSeconds": round(time.monotonic() - started, 1),
+        }
+    )
 
 
 SESSION_ACTIONS = ("new", "pause", "resume", "stop")
@@ -203,16 +227,6 @@ async def _session_action(request: web.Request) -> web.Response:
 async def _new_session(request: web.Request) -> web.Response:
     """Alias kept so a long-lived tab of an older setup page still works."""
     return await _run_session_action(request.app, "new")
-
-
-async def _quit(request: web.Request) -> web.Response:
-    """Ask the app to shut down (used by the Quit button on the setup page)."""
-    cb = request.app.get("request_shutdown")
-    if cb is not None:
-        cb()
-        logger.info("shutdown requested via /api/quit")
-        return web.json_response({"ok": True})
-    raise web.HTTPNotImplemented(reason="shutdown not available")
 
 
 # -- config API -----------------------------------------------------------
@@ -311,7 +325,6 @@ def build_app(
     apply_config=None,
     history_dir: str | None = None,
     history_writer=None,
-    request_shutdown=None,
     session_control=None,
 ) -> web.Application:
     app = web.Application(middlewares=[_no_cache_middleware])
@@ -321,9 +334,11 @@ def build_app(
     app["apply_config"] = apply_config
     app["history_dir"] = history_dir
     app["history_writer"] = history_writer
-    app["request_shutdown"] = request_shutdown
     app["session_control"] = session_control
     app["websockets"] = set()
+    # A mutable holder, so run_server can record the bound port without mutating
+    # the application itself once it has started (aiohttp deprecates that).
+    app["identity"] = {"started_at": time.monotonic(), "port": None}
     app.on_shutdown.append(_on_shutdown)
     app.add_routes(
         [
@@ -340,7 +355,6 @@ def build_app(
             web.delete("/api/history/{id}", _api_delete_session),
             web.post("/api/session/{action}", _session_action),
             web.post("/api/new-session", _new_session),
-            web.post("/api/quit", _quit),
         ]
     )
     # Shared modules (render.js, history-ui.js, css) live with the web
@@ -382,7 +396,6 @@ async def run_server(
     port_scan: bool = False,
     history_dir: str | None = None,
     history_writer=None,
-    request_shutdown=None,
     session_control=None,
 ) -> tuple[web.AppRunner, int]:
     """Start the server; return (runner, actual_port). Caller cleans up the runner."""
@@ -393,7 +406,6 @@ async def run_server(
         apply_config=apply_config,
         history_dir=history_dir,
         history_writer=history_writer,
-        request_shutdown=request_shutdown,
         session_control=session_control,
     )
     runner = web.AppRunner(app)
@@ -403,6 +415,7 @@ async def run_server(
     except PortInUseError:
         await runner.cleanup()
         raise
+    app["identity"]["port"] = bound
     logger.info("overlay server on http://%s:%d  (OBS Browser Source URL)", host, bound)
     logger.info("config/setup page at http://%s:%d/config", host, bound)
     return runner, bound

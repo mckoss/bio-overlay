@@ -44,18 +44,6 @@ export async function sessionAction(action) {
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
 }
 
-export async function quitApp() {
-  if (!confirm("Quit bio-overlay? The overlay goes offline until you start the app again.")) {
-    return false;
-  }
-  try {
-    await fetch("/api/quit", { method: "POST" });
-  } catch {
-    // The server closes the connection as it shuts down; that's expected.
-  }
-  return true;
-}
-
 /**
  * Subscribe to telemetry snapshots. Used by pages that don't already hold a
  * WebSocket of their own (the overlay page feeds its state in directly).
@@ -121,8 +109,7 @@ export function createSessionControls(el, { hoverReveal = false, links = false, 
 
   const run = async (action) => {
     try {
-      if (action === "quit") await quitApp();
-      else await sessionAction(action);
+      await sessionAction(action);
     } catch (err) {
       if (onError) onError(err);
     }
@@ -142,7 +129,6 @@ export function createSessionControls(el, { hoverReveal = false, links = false, 
       el.appendChild(button(label, action, className));
     }
     if (links) {
-      el.appendChild(button("⏻ Quit", "quit", "danger"));
       for (const [label, href] of [["⚙ Setup", "/config"], ["History", "/history"]]) {
         const a = document.createElement("a");
         a.className = "session-btn link";

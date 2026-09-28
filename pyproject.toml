@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bio-overlay"
-version = "1.6.0"
+version = "2.0.0"
 description = "Live heart-rate video overlay for remote training sessions"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,8 +21,14 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
 ]
+# The app window (`bio-overlay app`). Without it the app still runs and opens
+# the setup page in a browser, so it is not a hard dependency of the library.
+app = [
+    "pywebview>=6.0",
+]
 package = [
     "pyinstaller>=6.0",
+    "pywebview>=6.0",
 ]
 
 [project.scripts]
