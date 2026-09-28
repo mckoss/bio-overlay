@@ -129,6 +129,11 @@ def _show_window(url: str, child: subprocess.Popen) -> None:
         _browser_fallback(url, child)
         return
 
+    # The pages open each other (overlay preview, Setup, History) with
+    # target="_blank", which pywebview hands to the system browser by default.
+    # Every such link is to this server, so keep them in the app window.
+    webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = False
+
     window = webview.create_window(
         WINDOW_TITLE,
         url,
