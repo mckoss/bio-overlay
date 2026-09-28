@@ -1,11 +1,10 @@
-# PyInstaller spec — builds a single-file `bio-overlay` executable, plus a
-# double-clickable bio-overlay.app bundle on macOS.
+# PyInstaller spec — builds a single-file `bio-overlay.exe` on Windows and a
+# double-clickable bio-overlay.app bundle (onedir) on macOS.
 #
 # Build from the repo root:
 #     pyinstaller packaging/bio-overlay.spec
 #
-# Output: dist/bio-overlay (+ dist/bio-overlay.app on macOS) or
-# dist/bio-overlay.exe (Windows).
+# Output: dist/bio-overlay.app (macOS) or dist/bio-overlay.exe (Windows).
 # Note: PyInstaller does not cross-compile — build on each target OS (CI does both).
 
 import re
@@ -61,12 +60,20 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+# macOS gets a onedir bundle, not onefile. A onefile .app runs a bootloader that
+# unpacks Python and starts it as a *child* process; LaunchServices activates
+# the bootloader, which never shows a window, while the window belongs to the
+# child, which macOS then refuses to bring to the front. Onedir runs Python in
+# the launched process itself, so the window comes up frontmost. (It also starts
+# faster, with nothing to unpack.) Windows keeps the single .exe download.
+ONEDIR = sys.platform == "darwin"
+
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
+    *([] if ONEDIR else [a.binaries, a.datas]),
     [],
+    exclude_binaries=ONEDIR,
     name="bio-overlay",
     debug=False,
     bootloader_ignore_signals=False,
@@ -84,8 +91,16 @@ exe = EXE(
 # Finder. The Info.plist Bluetooth usage strings let macOS show the BLE
 # permission prompt when the app first scans for straps.
 if sys.platform == "darwin":
-    app = BUNDLE(
+    coll = COLLECT(
         exe,
+        a.binaries,
+        a.datas,
+        strip=False,
+        upx=False,
+        name="bio-overlay",
+    )
+    app = BUNDLE(
+        coll,
         name="bio-overlay.app",
         icon=APP_ICON,
         bundle_identifier="com.mckoss.bio-overlay",
