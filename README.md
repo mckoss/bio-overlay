@@ -464,12 +464,13 @@ real-hardware findings.
 
 ## Building & releasing
 
-Build a single-file executable locally (output in `dist/`):
+Build locally (output in `dist/`: `bio-overlay.app` on macOS, a single
+`bio-overlay.exe` on Windows):
 
 ```bash
 python -m pip install -e ".[package]"
 pyinstaller packaging/bio-overlay.spec --noconfirm
-./dist/bio-overlay --version
+./dist/bio-overlay.app/Contents/MacOS/bio-overlay --version   # Windows: dist\bio-overlay.exe --version
 ```
 
 PyInstaller cannot cross-compile, so each OS is built on its own runner. The
