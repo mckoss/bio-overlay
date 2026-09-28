@@ -30,11 +30,11 @@ python -m pip install -e ".[dev]"
 ## Run without hardware (works now)
 
 ```bash
-bio-overlay simulate          # serves http://127.0.0.1:8080/
+bio-overlay simulate          # serves http://127.0.0.1:24600/
 # or: python -m bio_overlay.cli simulate
 ```
 
-Open `http://127.0.0.1:8080/` in a browser (or add it as an OBS Browser Source).
+Open `http://127.0.0.1:24600/` in a browser (or add it as an OBS Browser Source).
 You should see two panels with live, drifting BPM. Participant 2 periodically
 goes to a "no signal" stale state to demonstrate the disconnected UI.
 

@@ -175,21 +175,6 @@ select:focus {
   color: #fff;
 }
 
-.btn-danger {
-  background: transparent;
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.btn-danger:hover {
-  background: var(--accent);
-  color: #fff;
-}
-
-.quit-section {
-  margin-top: 1.5rem;
-}
-
 /* Session section: Pause / Stop / Start-new sit together, with a live state
    line that turns red whenever nothing is being recorded. */
 .session-buttons {

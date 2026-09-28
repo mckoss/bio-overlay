@@ -42,6 +42,11 @@ for pkg in ("bleak", "aiohttp"):
 # Pull in the platform-specific bleak backend (CoreBluetooth / WinRT / BlueZ).
 hiddenimports = collect_submodules("bleak")
 
+# pywebview picks its backend by name at runtime (cocoa / edgechromium / ...),
+# so nothing imports them statically for PyInstaller to find. Its own bundled
+# hook (webview/__pyinstaller) handles the data files and Windows DLLs.
+hiddenimports += collect_submodules("webview")
+
 a = Analysis(
     [str(ROOT / "packaging" / "run_bio_overlay.py")],
     pathex=[str(ROOT / "src")],
@@ -91,11 +96,10 @@ if sys.platform == "darwin":
             "CFBundleShortVersionString": VERSION,
             "CFBundleVersion": VERSION,
             "LSMinimumSystemVersion": "11.0",
-            # Agent (faceless) app: the UI lives in the browser, and the process
-            # never starts a Cocoa event loop. Without this, LaunchServices
-            # times out waiting for the app to check in with the window server
-            # and shows "the application is not open anymore" on launch.
-            "LSUIElement": True,
+            # Deliberately NOT LSUIElement any more: the app owns a real window,
+            # so it should have a Dock icon and a menu bar. That also means
+            # Finder activates the running copy instead of launching a second
+            # one — the mistake this release is about.
             "NSBluetoothAlwaysUsageDescription":
                 "bio-overlay reads heart-rate data from Bluetooth chest straps.",
             "NSBluetoothPeripheralUsageDescription":

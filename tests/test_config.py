@@ -1,6 +1,11 @@
 """Tests for config serialization and save/load roundtrip."""
 
-from bio_overlay.config import AppConfig, ParticipantConfig
+from bio_overlay.config import (
+    DEFAULT_PORT,
+    LEGACY_DEFAULT_PORT,
+    AppConfig,
+    ParticipantConfig,
+)
 
 
 def test_to_dict_roundtrip():
@@ -43,3 +48,30 @@ def test_to_dict_omits_unset_address():
     assert "address" not in p.to_dict()
     p2 = ParticipantConfig(id="p2", display_name="Two", address="UUID-123")
     assert p2.to_dict()["address"] == "UUID-123"
+
+
+def test_port_defaults_to_the_apps_own_port():
+    """A config with no port uses the default, so the default can move."""
+    cfg = AppConfig.from_dict({"participants": []})
+    assert cfg.port == DEFAULT_PORT
+    assert cfg.port_migrated is False
+
+
+def test_legacy_default_port_is_migrated():
+    """A saved 8080 means "never chose a port" — configs written before 2.0 all
+    carry it, and leaving them on the contested default defeats the point."""
+    cfg = AppConfig.from_dict({"port": LEGACY_DEFAULT_PORT, "participants": []})
+    assert cfg.port == DEFAULT_PORT
+    assert cfg.port_migrated is True
+
+
+def test_explicitly_chosen_port_survives():
+    cfg = AppConfig.from_dict({"port": 9123, "participants": []})
+    assert cfg.port == 9123
+    assert cfg.port_migrated is False
+
+
+def test_port_migration_flag_is_not_persisted():
+    cfg = AppConfig.from_dict({"port": LEGACY_DEFAULT_PORT, "participants": []})
+    assert "port_migrated" not in cfg.to_dict()
+    assert AppConfig.from_dict(cfg.to_dict()).port_migrated is False

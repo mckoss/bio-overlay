@@ -38,6 +38,21 @@ from pathlib import Path
 
 DEFAULT_NAME_PREFIX = "Polar H10"
 
+# A port that is ours alone. 8080 is the most contested port in local
+# development, so "address in use" there told you nothing — which is why the
+# app used to scan past it and silently start a second copy of itself. On a
+# port nothing else claims, a collision is almost certainly bio-overlay, and
+# the /healthz probe can say so by name and version.
+#
+# Chosen: unassigned in the IANA registry, clear of the usual dev-server
+# range, and below 49152 (the macOS ephemeral range, where an outbound socket
+# could grab it out from under us). 24600 = "BIO" on a phone keypad.
+DEFAULT_PORT = 24600
+
+# Configs written before 2.0 pinned the old default. A saved 8080 is treated as
+# "never chose a port" and migrated; an explicit anything-else is respected.
+LEGACY_DEFAULT_PORT = 8080
+
 
 @dataclass
 class ParticipantConfig:
@@ -74,7 +89,10 @@ class AppConfig:
     participants: list[ParticipantConfig] = field(default_factory=list)
     stale_after_seconds: float = 5.0
     host: str = "127.0.0.1"
-    port: int = 8080
+    port: int = DEFAULT_PORT
+    # True when a saved LEGACY_DEFAULT_PORT was rewritten to DEFAULT_PORT on
+    # load. Not persisted; the CLI reads it to log the change once.
+    port_migrated: bool = field(default=False, compare=False, repr=False)
 
     @classmethod
     def from_dict(cls, data: dict) -> "AppConfig":
@@ -93,11 +111,16 @@ class AppConfig:
             )
             for p in data.get("participants", [])
         ]
+        port = int(data.get("port", DEFAULT_PORT))
+        migrated = port == LEGACY_DEFAULT_PORT
+        if migrated:
+            port = DEFAULT_PORT
         return cls(
             participants=participants,
             stale_after_seconds=float(data.get("staleAfterSeconds", 5.0)),
             host=data.get("host", "127.0.0.1"),
-            port=int(data.get("port", 8080)),
+            port=port,
+            port_migrated=migrated,
         )
 
     def to_dict(self) -> dict:

@@ -1,6 +1,5 @@
 {
   "host": "127.0.0.1",
-  "port": 8080,
   "staleAfterSeconds": 5.0,
   "participants": [
     {

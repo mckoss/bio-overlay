@@ -6,7 +6,7 @@
 (() => {
   "use strict";
 
-  let config = { host: "127.0.0.1", port: 8080, staleAfterSeconds: 5.0, participants: [] };
+  let config = { host: "127.0.0.1", port: 24600, staleAfterSeconds: 5.0, participants: [] };
 
   const participantsEl = document.getElementById("participants");
   const scanResultsEl = document.getElementById("scan-results");
@@ -327,27 +327,12 @@
     if (await sessionAction("stop")) setStatus("Session stopped — not recording.", "ok");
   }
 
-  async function quit() {
-    if (!confirm("Quit bio-overlay? The overlay will go offline until you start the app again.")) {
-      return;
-    }
-    try {
-      await fetch("/api/quit", { method: "POST" });
-    } catch {
-      // The server closes the connection as it shuts down; that's expected.
-    }
-    document.body.innerHTML =
-      '<main class="wrap"><h1>bio-overlay stopped</h1>' +
-      "<p class='hint'>You can close this tab. Re-open the app to start again.</p></main>";
-  }
-
   document.getElementById("add").addEventListener("click", addParticipant);
   document.getElementById("scan").addEventListener("click", (e) => scan(e.currentTarget));
   document.getElementById("save").addEventListener("click", save);
   document.getElementById("new-session").addEventListener("click", newSession);
   pauseBtn.addEventListener("click", togglePause);
   stopBtn.addEventListener("click", stopSession);
-  document.getElementById("quit").addEventListener("click", quit);
 
   window.addEventListener("resize", sizePreview);
   sizePreview();
